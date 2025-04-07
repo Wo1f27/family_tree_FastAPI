@@ -3,10 +3,13 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
+app.include_router()
+app.include_router()
+
 
 @app.get('/')
 def hello():
-    return {'muuuur': 'Hello'}
+    return {'title': 'Hello on Family-Tree'}
 
 
 if __name__ == '__main__':

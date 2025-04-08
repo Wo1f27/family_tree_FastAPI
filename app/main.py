@@ -1,10 +1,13 @@
 from fastapi import FastAPI
+from fastapi.templating import Jinja2Templates
+from app.modules.auth import auth_routers
 
 
 app = FastAPI()
 
-app.include_router()
-app.include_router()
+templates = Jinja2Templates(directory='app/templates')
+
+app.include_router(auth_routers.router)
 
 
 @app.get('/')
@@ -14,4 +17,4 @@ def hello():
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run('main:app', reload=True)
+    uvicorn.run('app.main:app', reload=True)

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load thumbnail %}
+
+{% block title %}Люди{% endblock %}
+
+{% block content %}
+    <h1>Список людей</h1>
+    <div class="cards-container">
+        {% for card in cards %}
+            <div class="card">
+                {% if card.profile_avatar %}
+                    <a href="{{ card.profile_avatar.url }}">
+                        <img src="{% thumbnail card.profile_avatar 180x180 %}">
+                    </a>
+                {% endif %}
+                <p>
+                    <a href="{{ card.get_absolute_url }}">{{ card.first_name }} {{ card.last_name }}</a>
+                </p>
+                <p>{{ card.date_of_birth|date:"d-m-Y" }}
+                    {% if card.date_of_death %}
+                    - {{ card.date_of_death|date:"d-m-Y" }}
+                    {% endif %}</p>
+                <form action="{% url 'person_card:delete_card' card.id %}" method="POST"
+                      onsubmit="return confirm('Вы уверены, что хотите удалить?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-destroy">Удалить</button>
+                </form>
+
+            </div>
+        {% empty %}
+            <p>No cards of person yet</p>
+        {% endfor %}
+    </div>
+    {% include "pagination.html" with page=cards %}
+{% endblock %}

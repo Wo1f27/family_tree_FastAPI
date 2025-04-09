@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Create card{% endblock %}
+
+{% block content %}
+    <h1>Создание карточки человуека</h1>
+    <p>Используя форму ниже, вы можете создать карточку человека</p>
+    <form method="POST" enctype="multipart/form-data">
+        {{ form.person_form.as_p }}
+        {{ form.email_form.as_p }}
+        {{ form.phone_number_form.as_p }}
+        {% csrf_token %}
+        <input type="submit" value="Создать">
+    </form>
+{% endblock %}

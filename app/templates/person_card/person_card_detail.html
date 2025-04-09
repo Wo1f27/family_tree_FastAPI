@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load thumbnail %}
+
+{% block title %}{{ card.first_name }} {{ card.last_name }}{% endblock %}
+
+{% block content %}
+    <h1>{{ card.first_name }} {{ card.last_name }}</h1>
+    <div class="card-detail">
+        <div>
+        {% if card.profile_avatar %}
+            <img src="{% thumbnail card.profile_avatar 500x500 %}">
+        {% endif %}
+        </div>
+        <div>
+            <h3>{{ card }}</h3><br>
+            Дата рождения: {{ card.date_of_birth|date:"d-m-Y" }}<br>
+            Дата смерти: {{ card.date_of_death|date:"d-m-Y" }}<br>
+            Email:
+            {% for email in card.emails.all %}
+                <span>{{ email.email }}</span><br>
+            {% empty %}
+                Нет электронной почты<br>
+            {% endfor %}
+
+            Моб.телефон:
+            {% for phone in card.phones.all %}
+                <span>{{ phone.phone_number }}</span><br>
+            {% empty %}
+                Нет номера телефона<br>
+            {% endfor %}
+            Заметки:<br>
+            {{ card.notes }}
+        </div>
+    </div>
+
+{% endblock %}

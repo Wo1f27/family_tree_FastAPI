@@ -1,13 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Request
 from fastapi.templating import Jinja2Templates
 from app.modules.auth import auth_routers
 
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory='app/templates')
+templates = Jinja2Templates(directory='templates/')
 
-app.include_router(auth_routers.router)
+app.include_router(auth_routers.router, dependencies=[Depends(lambda: templates)])
 
 
 @app.get('/')

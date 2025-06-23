@@ -10,9 +10,10 @@ from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from .auth import validate_user
 from app.db.config import get_db
+from ..users.entities.users import CreateUser
 
 
-router = APIRouter(prefix='/login')
+router = APIRouter(prefix='/login', tags=['Auth'])
 templates = Jinja2Templates(directory='templates/')
 
 
@@ -28,3 +29,8 @@ async def auth_user(request: Request, db: Session = Depends(get_db)):
     if res.get('success'):
         return RedirectResponse(url='/', status_code=status.HTTP_303_SEE_OTHER)
     return HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@router.post('/register/')
+async def register_user(user_data: CreateUser) -> dict:
+    pass

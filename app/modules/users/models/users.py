@@ -6,7 +6,8 @@ from sqlalchemy import (
     Text,
     DateTime,
     Column,
-    ForeignKey
+    ForeignKey,
+    text
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from ....db.config import Base
@@ -21,6 +22,12 @@ class User(Base):
     password: Mapped[str] = mapped_column(String, unique=True)
     create_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.now())
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='false')
+
+    is_user: Mapped[bool] = mapped_column(default=True, server_default=text('true'), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(default=False, server_default=text('false'), nullable=False)
+    is_superadmin: Mapped[bool] = mapped_column(default=False, server_default=text('false'), nullable=False)
+
+    extend_existing = True
 
 
 class Profile(Base):
@@ -39,3 +46,5 @@ class Profile(Base):
         nullable=False
     )
     avatar: Mapped[str]
+
+    extend_existing = True

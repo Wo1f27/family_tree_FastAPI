@@ -13,6 +13,18 @@ class CreateUser(BaseModel):
         return username
 
 
+class UpdateUser(BaseModel):
+    id: int
+    username: str | None
+    password: str | None
+
+    @field_validator('username', mode='after')
+    def check_username_not_spaces(self, username):
+        if ' ' in username:
+            raise ValueError('Логин не должен содержать пробелов')
+        return username
+
+
 class CreateProfile(BaseModel):
     user_id: int
     first_name: str

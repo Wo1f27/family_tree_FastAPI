@@ -11,7 +11,6 @@ from ..auth.auth import validate_user
 from app.db.config import get_db
 from ..users.entities.users import CreateUser, UpdateUser
 from .operators import users
-from .models.users import User
 
 
 router = APIRouter(prefix='/users', tags=['Users'])
@@ -24,6 +23,24 @@ def get_users(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get('/{user_id}/')
-def get_user(request: Request, user_id: int):
-    response = users.get_user(user_id)
+def get_user(request: Request, user_id: int, db: Session = Depends(get_db)):
+    response = users.get_user(user_id, db)
+    return response
+
+
+@router.post('/')
+def add_user(request: Request, user_data: CreateUser, db: Session = Depends(get_db)):
+    response = users.create_user(user_data, db)
+    return response
+
+
+@router.patch('/{user_id}/')
+def update_user(request: Request, user_data: UpdateUser, db: Session = Depends(get_db)):
+    response = users.update_user(user_data, db)
+    return response
+
+
+@router.delete('/{user_id}/')
+def delete_user(request: Request, user_id: int, db: Session = Depends(get_db)):
+    response = users.delete_user(user_id, db)
     return response

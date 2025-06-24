@@ -11,14 +11,15 @@ from ..auth.auth import validate_user
 from app.db.config import get_db
 from ..users.entities.users import CreateUser, UpdateUser
 from .operators import users
+from .models.users import User
 
 
 router = APIRouter(prefix='/users', tags=['Users'])
 
 
 @router.get('/')
-def get_users(request: Request):
-    response = users.get_list_users()
+def get_users(request: Request, db: Session = Depends(get_db)):
+    response = users.get_list_users(db=db)
     return response
 
 

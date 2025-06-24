@@ -2,11 +2,12 @@ from fastapi import HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import bcrypt
+from sqlalchemy.util import deprecated
 
 from app.modules.users.models.users import User
 
 
-pwd_context = CryptContext(schemes=['bcrypt'], depricated='auto')
+pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 
 def hash_password(password: str) -> str:

@@ -7,7 +7,7 @@ class CreateUser(BaseModel):
     password: str
 
     @field_validator('username', mode='after')
-    def check_username_not_spaces(self, username):
+    def check_username_not_spaces(cls, username):
         if ' ' in username:
             raise ValueError('Логин не должен содержать пробелов')
         return username
@@ -19,7 +19,7 @@ class UpdateUser(BaseModel):
     password: str | None
 
     @field_validator('username', mode='after')
-    def check_username_not_spaces(self, username):
+    def check_username_not_spaces(cls, username):
         if ' ' in username:
             raise ValueError('Логин не должен содержать пробелов')
         return username

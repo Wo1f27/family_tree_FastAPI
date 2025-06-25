@@ -22,5 +22,5 @@ def validate_user(db: Session, username: str, password: str) -> dict | HTTPExcep
     user = db.query(User).filter_by(username=username).first()
     hashed_password = hash_password(password)
     if user and verify_password(user.password, hashed_password):
-        return {'success': True}
+        return {'success': True, 'user': user}
     return {'success': False}

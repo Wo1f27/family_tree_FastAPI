@@ -8,6 +8,10 @@ def get_user(user_id: int, db: Session) -> User | None:
     return users.get_user_by_id(user_id, db)
 
 
+def get_user_by_username(username: str, db: Session) -> User | None:
+    return users.get_user_by_username(username, db)
+
+
 def get_list_users(db: Session) -> list[User]:
     return users.get_list_users(db=db)
 

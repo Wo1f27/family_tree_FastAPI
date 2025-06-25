@@ -10,6 +10,11 @@ def get_user_by_id(user_id: int, db: Session) -> User | None:
     return user
 
 
+def get_user_by_username(username: str, db: Session) -> User | None:
+    user = db.query(User).filter(User.username == username).one_or_none()
+    return user
+
+
 def get_list_users(db: Session) -> list[User]:
     users = db.query(User).all()
     return users

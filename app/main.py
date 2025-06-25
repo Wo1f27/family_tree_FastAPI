@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, Request
 from fastapi.templating import Jinja2Templates
 from app.modules.auth import auth_routers
-from app.modules.users import user_routers
+from app.modules.users import user_routers, profile_routers
 
 
 app = FastAPI()
@@ -10,6 +10,7 @@ templates = Jinja2Templates(directory='templates/')
 
 app.include_router(auth_routers.router)
 app.include_router(user_routers.router)
+app.include_router(profile_routers.router)
 
 
 @app.get('/')

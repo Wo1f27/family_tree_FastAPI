@@ -1,9 +1,7 @@
-from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from app.modules.users.models.users import User, Profile
-from app.modules.users.entities.users import CreateUser, CreateProfile, UpdateUser
-from app.db.config import get_db
+from app.modules.users.models.users import User
+from app.modules.users.entities.users import CreateUser, UpdateUser
 from app.modules.auth.auth import hash_password
 
 

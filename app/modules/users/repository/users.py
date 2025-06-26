@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.modules.users.models.users import User
-from app.modules.users.entities.users import CreateUser, UpdateUser, UserBaseSchema, UserResponse
+from app.modules.users.entities.users import CreateUser, UpdateUser, UserResponse
 from app.modules.auth.auth import hash_password
 
 

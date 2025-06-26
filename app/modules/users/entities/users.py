@@ -1,5 +1,24 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from datetime import datetime
+
+
+class UserBaseSchema(BaseModel):
+    id: int
+    username: str
+    password: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class CreateUser(BaseModel):
@@ -11,6 +30,8 @@ class CreateUser(BaseModel):
         if ' ' in username:
             raise ValueError('Логин не должен содержать пробелов')
         return username
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UpdateUser(BaseModel):
@@ -24,12 +45,4 @@ class UpdateUser(BaseModel):
             raise ValueError('Логин не должен содержать пробелов')
         return username
 
-
-class CreateProfile(BaseModel):
-    user_id: int
-    first_name: str
-    last_name: str
-    email: EmailStr
-    date_of_birth: datetime | None
-    mobile_phone: str | None
-    avatar: str | None
+    model_config = ConfigDict(from_attributes=True)

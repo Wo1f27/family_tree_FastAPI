@@ -1,5 +1,17 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from datetime import datetime, date
+
+
+class ProfileBaseSchema(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    date_of_birth: date | None
+    email: EmailStr | None
+    mobile_phone: str | None
+    avatar: str | None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CreateProfile(BaseModel):
@@ -10,6 +22,8 @@ class CreateProfile(BaseModel):
     mobile_phone: str | None
     avatar: str | None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UpdateProfile(BaseModel):
     id: int
@@ -19,3 +33,5 @@ class UpdateProfile(BaseModel):
     email: EmailStr | None
     mobile_phone: str | None
     avatar: str | None
+
+    model_config = ConfigDict(from_attributes=True)

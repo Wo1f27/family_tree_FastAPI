@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from ..models.users import User, Profile
-from ..entities.users import CreateUser, CreateProfile, UpdateUser
+from ..entities.users import CreateUser, UpdateUser, UserResponse
 from ..repository import users
 
 
@@ -16,7 +16,7 @@ def get_list_users(db: Session) -> list[User]:
     return users.get_list_users(db=db)
 
 
-def create_user(data: CreateUser, db: Session) -> User:
+def create_user(data: CreateUser, db: Session) -> UserResponse:
     return users.create_user(data, db)
 
 

@@ -6,15 +6,23 @@ class UserBaseSchema(BaseModel):
     id: int
     username: str
     password: str
+    is_active: bool
+    is_user: bool
+    is_admin: bool
+    is_superadmin: bool
 
     model_config = ConfigDict(
         from_attributes=True,
     )
 
 
-class UserResponse(BaseModel):
+class UserResponseSchema(BaseModel):
     id: int
     username: str
+    is_active: bool
+    is_user: bool
+    is_admin: bool
+    is_superadmin: bool
 
     model_config = ConfigDict(
         from_attributes=True,

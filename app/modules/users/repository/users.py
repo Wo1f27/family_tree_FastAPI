@@ -1,19 +1,19 @@
 from sqlalchemy.orm import Session
 
 from app.modules.users.models.users import User
-from app.modules.users.entities.users import CreateUser, UpdateUser, UserResponse
+from app.modules.users.entities.users import CreateUser, UpdateUser, UserResponseSchema
 from app.modules.auth.auth import hash_password
 
 
-def get_user_by_id(user_id: int, db: Session) -> UserResponse | None:
+def get_user_by_id(user_id: int, db: Session) -> UserResponseSchema | None:
     user = db.query(User).filter(User.id == user_id).one_or_none()
     return user
 
 
-def get_user_by_username(username: str, db: Session) -> UserResponse | None:
+def get_user_by_username(username: str, db: Session) -> UserResponseSchema | None:
     user = db.query(User).filter(User.username == username).one_or_none()
     if user:
-        return UserResponse.model_validate(user)
+        return UserResponseSchema.model_validate(user)
     return None
 
 
@@ -22,13 +22,13 @@ def get_list_users(db: Session) -> list[User]:
     return users
 
 
-def create_user(user_data: CreateUser, db: Session) -> UserResponse:
+def create_user(user_data: CreateUser, db: Session) -> UserResponseSchema:
     new_user = User(username=user_data.username, password=user_data.password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     user = get_user_by_username(new_user.username, db)
-    return user.model_validate(user)
+    return user
 
 
 def update_user_by_id(user_data: UpdateUser, db: Session) -> User | None:

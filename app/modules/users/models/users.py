@@ -45,6 +45,6 @@ class Profile(Base):
         ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False
     )
-    avatar: Mapped[str]
+    avatar: Mapped[str] = mapped_column(String(250), nullable=True)
 
     extend_existing = True

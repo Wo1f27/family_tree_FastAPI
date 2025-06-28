@@ -7,6 +7,8 @@ from alembic import context
 
 from app.db.config import Base
 from app.modules.users.models.users import User, Profile
+from app.modules.person_card.models.person_card import Person, PersonKinship
+from app.enums.enums import GenderEnum, KinshipEnum
 
 
 # this is the Alembic Config object, which provides

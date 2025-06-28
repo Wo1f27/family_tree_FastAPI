@@ -1,6 +1,8 @@
 from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 from datetime import date, datetime
 
+from app.enums.enums import GenderEnum
+
 
 class PersonCardBaseSchema(BaseModel):
     id: int
@@ -25,8 +27,10 @@ class PersonCardCreateSchema(BaseModel):
     patronymic: str | None
     date_of_birth: date | None
     date_of_death: date | None
-    gender: int
+    gender: GenderEnum
     avatar: str | None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PersonCardUpdateSchema(BaseModel):
@@ -38,6 +42,8 @@ class PersonCardUpdateSchema(BaseModel):
     gender: int | None
     avatar: str | None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PersonCardResponseSchema(BaseModel):
     first_name: str | None
@@ -48,6 +54,8 @@ class PersonCardResponseSchema(BaseModel):
     gender: int | None
     avatar: str | None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class KinshipCreateSchema(BaseModel):
     user_id: int
@@ -55,10 +63,25 @@ class KinshipCreateSchema(BaseModel):
     person_id: int
     kinship: int
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class KinshipUpdateSchema(BaseModel):
     root_id: int | None
     person_id: int | None
     kinship: int | None
 
+    model_config = ConfigDict(from_attributes=True)
 
+
+class PersonCardWithKinshipResponseSchema(BaseModel):
+    first_name: str | None
+    last_name: str | None
+    patronymic: str | None
+    date_of_birth: str | None
+    date_of_death: str | None
+    gender: int | None
+    avatar: str | None
+    kinship_persons: dict | None
+
+    model_config = ConfigDict(from_attributes=True)

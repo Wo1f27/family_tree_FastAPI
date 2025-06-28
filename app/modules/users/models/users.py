@@ -8,6 +8,7 @@ from sqlalchemy import (
     Enum as SQLAlchemyEnum,
     text
 )
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from ....db.config import Base
 from ....enums import enums
@@ -40,7 +41,13 @@ class Profile(Base):
     date_of_birth: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     email: Mapped[str]
     mobile_phone: Mapped[str]
-    gender: Mapped[int] = mapped_column(SQLAlchemyEnum(enums.GenderEnum), nullable=False)
+    gender: Mapped[int] = mapped_column(
+        PgEnum(enums.GenderEnum,
+               name='gender_enum_type',
+               create_type=False),
+        nullable=False,
+        default=enums.GenderEnum.MALE
+    )
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey('users.id', ondelete='CASCADE'),

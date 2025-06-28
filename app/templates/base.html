@@ -1,0 +1,38 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>
+        {% block title %}{% endblock %}
+    </title>
+    <link href="{% static "css/base.css" %}" rel="stylesheet">
+</head>
+<body>
+    <div id="header">
+        <span class="logo">Family tree</span>
+        {% if request.user.is_authenticated %}
+            <ul class="menu">
+                <li>
+                    <a href="{% url 'main_page' %}">Home</a>
+                </li>
+                <li>
+                    <a href="{% url 'person_card:person_cards' %}">Люди</a>
+                </li>
+                <li class="create">
+                    <a href="{% url 'person_card:create_card' %}">Добавить</a>
+                </li>
+            </ul>
+        {% endif %}
+    </div>
+    <div id="content">
+        {% block content%}
+        {% endblock %}
+    </div>
+    <div>
+        {% block footer %}
+        {% endblock %}
+    </div>
+</body>
+</html>

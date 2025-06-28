@@ -3,14 +3,14 @@ from sqlalchemy import (
     Integer,
     Boolean,
     String,
-    Text,
     DateTime,
-    Column,
     ForeignKey,
+    Enum as SQLAlchemyEnum,
     text
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from ....db.config import Base
+from ....enums import enums
 
 
 class User(Base):
@@ -40,6 +40,7 @@ class Profile(Base):
     date_of_birth: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     email: Mapped[str]
     mobile_phone: Mapped[str]
+    gender: Mapped[int] = mapped_column(SQLAlchemyEnum(enums.GenderEnum), nullable=False)
     user_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey('users.id', ondelete='CASCADE'),

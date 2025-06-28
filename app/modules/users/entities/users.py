@@ -1,5 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
-from datetime import datetime
+from pydantic import BaseModel, field_validator, ConfigDict
 
 
 class UserBaseSchema(BaseModel):

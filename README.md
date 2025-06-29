@@ -24,4 +24,36 @@
 
    ```bash
    git clone https://github.com/Wo1f27/family_tree_FastAPI.git
-  
+   ```
+   
+2. **Создайте виртуальное окружение:**
+   
+   ```bash
+   python -m venv venv
+   ```
+   
+3. **Активируйте виртуальное окружение:**
+
+   - Windows
+   ```bash
+   venv\Scripts\activate
+   ```
+   - Linux, MacOS
+   ```bash
+   source venv/bin/activate
+   ```
+
+4. **Установите зависимости:**
+   
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Запуск проекта**
+
+   Перейдите в корень проекта и запустите команду
+
+   ```bash
+   python main.py
+   ```
+### Документация по API доступна после запуска main.py в корне проекта по адресу http://localhost:8000/docs

@@ -11,7 +11,7 @@ class PersonCardBaseSchema(BaseModel):
     patronymic: str | None
     date_of_birth: date | None
     date_of_death: date | None
-    gender: int
+    gender: GenderEnum
     avatar: str | None
     created_at: datetime
     updated_at: datetime
@@ -34,12 +34,13 @@ class PersonCardCreateSchema(BaseModel):
 
 
 class PersonCardUpdateSchema(BaseModel):
+    id: int
     first_name: str | None
     last_name: str | None
     patronymic: str | None
     date_of_birth: date | None
     date_of_death: date | None
-    gender: int | None
+    gender: GenderEnum
     avatar: str | None
 
     model_config = ConfigDict(from_attributes=True)

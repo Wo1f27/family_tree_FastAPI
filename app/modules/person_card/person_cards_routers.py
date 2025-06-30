@@ -91,7 +91,7 @@ def update_person_card(person_data: PersonCardUpdateSchema, db: Session = Depend
         )
 
 
-@router.delete('/{person_id}/')
+@router.delete('/{person_id}')
 def delete_person_card(person_id: int, db: Session = Depends(get_db)) -> JSONResponse:
     try:
         response = person_card.delete_person_card(person_id, db)

@@ -48,6 +48,8 @@ def update_person_card(person_data: PersonCardUpdateSchema, db: Session) -> dict
         if person:
             if isinstance(person.date_of_birth, datetime):
                 person.date_of_birth = person.date_of_birth.isoformat()
+            if isinstance(person.date_of_death, datetime):
+                person.date_of_death = person.date_of_death.isoformat()
             resp_person = PersonCardResponseSchema.model_validate(person)
             resp_person = resp_person.model_dump()
     except Exception as e:
@@ -58,7 +60,7 @@ def update_person_card(person_data: PersonCardUpdateSchema, db: Session) -> dict
 def delete_person_card(person_id: int, db: Session) -> dict:
     try:
         del_person = person_card.delete_person_card_by_id(person_id, db)
-        if del_person['result'] == 'success':
+        if del_person.get('success'):
             return {'success': True, 'detail': 'Карточка удалена успешно'}
         else:
             return {'success': False, 'detail': 'Ошибка при удалении картчоки'}

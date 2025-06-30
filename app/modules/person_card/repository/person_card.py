@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.person_card.models.person_card import Person, PersonKinship
@@ -40,6 +41,7 @@ def update_person_card_by_id(person_data: PersonCardUpdateSchema, db: Session) -
         return None
     for key, value in person_data.dict(exclude_unset=True).items():
         setattr(person_card, key, value)
+    person_card.updated_at = datetime.now()
     db.commit()
     db.refresh(person_card)
     return person_card

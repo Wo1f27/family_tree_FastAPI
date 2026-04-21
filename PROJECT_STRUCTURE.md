@@ -142,14 +142,40 @@ family_tree/
 │
 ├── tests/                                   # 🧪 Тесты
 │   ├── __init__.py
-│   ├── unit/
-│   │   ├── test_use_cases.py
-│   │   └── test_services.py
-│   ├── integration/
-│   │   ├── test_repositories.py
-│   │   └── test_api.py
-│   └── fixtures/
-│       └── test_data.py
+│   ├── conftest.py                          # Общие fixtures и конфигурация Pytest
+│   ├── unit/                                # Юнит-тесты (без БД)
+│   │   ├── __init__.py
+│   │   ├── test_entities/                   # Тесты доменных сущностей
+│   │   │   ├── test_user.py
+│   │   │   ├── test_person.py
+│   │   │   └── test_relationship.py
+│   │   ├── test_use_cases/                  # Тесты Use Cases
+│   │   │   ├── test_user/
+│   │   │   │   ├── test_create_user.py
+│   │   │   │   └── test_get_user.py
+│   │   │   └── test_person/
+│   │   │       ├── test_create_person.py
+│   │   │       └── test_get_person.py
+│   │   └── test_services/                   # Тесты сервисов
+│   │       ├── test_password_service.py
+│   │       └── test_jwt_service.py
+│   ├── integration/                         # Интеграционные тесты (с БД)
+│   │   ├── __init__.py
+│   │   ├── test_repositories/
+│   │   │   ├── test_user_repository.py
+│   │   │   ├── test_person_repository.py
+│   │   │   └── test_relationship_repository.py
+│   │   └── test_api/
+│   │       ├── test_auth.py
+│   │       ├── test_persons.py
+│   │       └── test_users.py
+│   ├── fixtures/                            # Тестовые данные
+│   │   ├── __init__.py
+│   │   ├── test_data.py
+│   │   └── database_fixtures.py
+│   └── e2e/                                 # End-to-End тесты
+│       ├── __init__.py
+│       └── test_full_workflow.py
 │
 ├── alembic/                                 # Миграции БД
 │   ├── versions/

@@ -1,5 +1,5 @@
 from core.domain.entities.person import Person
 from core.domain.entities.user import User
-from core.domain.entities.relationship import Relationship
+from core.domain.entities.relationship import Relationship, RelationshipType
 
-__all__ = ['Person', 'User', 'Relationship']
+__all__ = ['Person', 'User', 'Relationship', 'RelationshipType']

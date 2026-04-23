@@ -12,13 +12,14 @@ class Gender(str, Enum):
 @dataclass
 class Person:
     id: int | None
+    owner_id: int
     first_name: str
     last_name: str
     middle_name: str | None
     date_birth: date | None
     date_death: date | None
-    gender: str
-    biography: str
+    gender: Gender
+    biography: str | None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC), init=False)
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC), init=False)
 

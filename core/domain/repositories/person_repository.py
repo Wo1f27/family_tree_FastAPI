@@ -23,3 +23,7 @@ class PersonRepository(ABC):
     @abstractmethod
     def get_all(self, skip: int = 0, limit: int = 100) -> list[Person]:
         pass
+
+    @abstractmethod
+    def get_by_id_and_owner_id(self, person_id: int, user_id: int) -> Person:
+        pass

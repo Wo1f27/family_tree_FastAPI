@@ -5,7 +5,7 @@ from datetime import datetime
 class CreateUserDTO(BaseModel):
     """DTO для создания пользователя"""
     username: str = Field(..., min_length=3, max_length=30)
-    password: str = Field(..., min_length=8, max_length=64)
+    password_hash: str = Field(..., min_length=8, max_length=64)
     email: EmailStr = Field(..., min_length=5, max_length=100)
 
 

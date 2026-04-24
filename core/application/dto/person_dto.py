@@ -18,7 +18,7 @@ class UpdatePersonDTO(BaseModel):
     """DTO для обновления персоны"""
     first_name: str | None = Field(None, description="Имя")
     last_name: str | None = Field(None, description="Фамилия")
-    middle_name: str | None= Field(None, description="Отчество")
+    middle_name: str | None = Field(None, description="Отчество")
     date_of_birth: date | None = Field(None, description="Дата рождения")
     date_of_death: date | None = Field(None, description="Дата смерти")
     gender: Gender | None = Field(None, description="Пол")

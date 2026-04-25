@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "family-tree"
 version = "0.1.0"
 description = "Генеалогическое дерево - Web API, Desktop и Mobile приложения"
-readme = "README.md"
+readme = ""
 requires-python = ">=3.12"
 authors = [
     {name = "Family Tree Team"}
@@ -19,9 +19,29 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-api = {file = "requirements/api.txt"}
-desktop = {file = "requirements/desktop.txt"}
-dev = {file = "requirements/dev.txt"}
+api = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.25.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.9",
+    "python-jose>=3.3.0",
+    "python-multipart>=0.0.6",
+    "bcrypt>=4.0.0",
+]
+desktop = [
+    "tkinter",
+]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.23.3",
+    "pytest-cov==4.1.0",
+    "httpx==0.28.1",
+    "black==24.2.0",
+    "ruff==0.3.0",
+    "mypy==1.8.0",
+    "mkdocs==1.5.3",
+    "mkdocs-material==9.5.3",
+]
 
 [tool.black]
 line-length = 100
@@ -37,6 +57,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.12"

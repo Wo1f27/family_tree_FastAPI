@@ -1,7 +1,7 @@
 from core.domain.entities import User
 from core.domain.repositories import UserRepository
 from core.application.dto import CreateUserDTO
-# в будущем сервис хэша пароля
+from core.infrastructure.auth.password_service import hash_password
 
 
 class CreateUserUseCase:
@@ -17,13 +17,13 @@ class CreateUserUseCase:
         if existing_username:
             raise ValueError("Пользователь с таким username уже существует")
 
-        password_hash = password_hash(dto.password)
+        hashed_password = hash_password(dto.password)
 
         user = User(
             id=None,
             email=dto.email,
             username=dto.username,
-            password_hash = password_hash
+            password_hash=hashed_password,
         )
 
         return self._user_repo.create(user)

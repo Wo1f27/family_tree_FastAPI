@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime, date
 from core.domain.entities import Gender
 
@@ -28,6 +28,8 @@ class UpdatePersonDTO(BaseModel):
 
 class PersonResponseDTO(BaseModel):
     """DTO для ответа с персоной"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     first_name: str
     last_name: str
@@ -39,5 +41,3 @@ class PersonResponseDTO(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True

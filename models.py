@@ -15,14 +15,14 @@ class Person(Base):
     __tablename__ = "persons"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    owned_id: Mapped[int] = mapped_column(default=None)
+    owner_id: Mapped[int | None] = mapped_column(default=None)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    middle_name: Mapped[str] = mapped_column(String(100), nullable=True)
+    middle_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     gender: Mapped[Gender] = mapped_column(String(10), nullable=False)
-    date_of_birth: Mapped[date]
-    date_of_death: Mapped[date]
-    biography: Mapped[str]
+    date_of_birth: Mapped[date | None]
+    date_of_death: Mapped[date | None]
+    biography: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
 

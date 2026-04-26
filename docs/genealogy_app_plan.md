@@ -59,10 +59,9 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 engine = create_engine(
     'sqlite:///genealogy.db',
     echo=False,
-    future=True  # Включает будущие функции SQLAlchemy 2.0
 )
 
-# Создаем сессию для работы с БД (используем future=True)
+# Создаем сессию для работы с БД
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -74,15 +73,6 @@ SessionLocal = sessionmaker(
 class Base(DeclarativeBase):
     """Базовый класс для моделей (SQLAlchemy 2.0 стиль)"""
     pass
-
-
-def get_db() -> SessionLocal:
-    """Получить новую сессию БД (context manager)"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def init_db() -> None:
@@ -154,11 +144,11 @@ class Relationship(Base):
 from __future__ import annotations
 
 import tkinter as tk
+import threading
 from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING
 
-import tkinter as tk
 from tkinter import ttk, messagebox
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -593,21 +583,7 @@ if __name__ == "__main__":
 
 ```
 SQLAlchemy>=2.0.0
-```
-
-### main.py
-
-```python
-from gui import main
-
-if __name__ == "__main__":
-    main()
-```
-
-### requirements.txt
-
-```
-SQLAlchemy>=2.0.0
+requests>=2.31.0
 ```
 
 ---
@@ -1161,4 +1137,52 @@ jobs:
 - Проверять целостность скачанного файла (хеш-сумма)
 - Использовать HTTPS для GitHub API
 - Не хранить токены/секреты в коде
+
+---
+
+## Исправления для Python 3.12-3.13
+
+### Что было исправлено
+
+| Проблема | Было | Стало |
+|----------|------|-------|
+| Дублирование импорта | `import tkinter as tk` дважды | Один импорт |
+| Устаревший параметр | `future=True` в `create_engine()` | Удалено (не нужно в SQLAlchemy 2.0+) |
+| Некорректный тип возвращаемого | `def get_db() -> SessionLocal:` с `yield` | Удалена функция `get_db()` (не использовалась) |
+| Дублирование файлов | `main.py` и `requirements.txt` дважды | Оставлен один экземпляр |
+| Missing dependency | Только `SQLAlchemy` | Добавлен `requests>=2.31.0` для updater |
+
+### Совместимость с Python 3.12-3.13
+
+```python
+# ✅ Работает в Python 3.10+
+from __future__ import annotations  # Для forward references
+
+# ✅ Union types (Python 3.10+)
+birth_date: Mapped[date | None]
+result: PersonData | None
+
+# ✅ Встроенные типы в аннотациях (Python 3.9+)
+rel_text: list[str]
+normalize(v: str) -> list[int]
+
+# ✅ TYPE_CHECKING для тяжёлых импортов
+if TYPE_CHECKING:
+    from collections.abc import Generator
+```
+
+### Рекомендации для Python 3.13
+
+1. **Python 3.13** сохраняет совместимость с `|` для union types
+2. **SQLAlchemy 2.0.25+** рекомендуется для полной совместимости
+3. **mypy 1.8+** лучше поддерживает Python 3.12-3.13
+4. **Pydantic V2** для валидации данных (опционально)
+
+### Минимальные версии зависимостей
+
+```txt
+# requirements.txt
+SQLAlchemy>=2.0.25      # Полная поддержка Python 3.12+
+requests>=2.31.0        # Безопасность и совместимость
+```
 

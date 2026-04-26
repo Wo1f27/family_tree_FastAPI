@@ -332,6 +332,82 @@ class GetPersonUseCase:
         return person
 ```
 
+**Файл:** `core/application/use_cases/person/update_person.py`
+
+```python
+from typing import Optional
+from core.domain.entities.person import Person
+from core.domain.repositories.person_repository import IPersonRepository
+from core.application.dto.person_dto import UpdatePersonDTO
+
+
+class UpdatePersonUseCase:
+    def __init__(self, person_repo: IPersonRepository):
+        self._person_repo = person_repo
+    
+    def execute(self, person_id: int, dto: UpdatePersonDTO, owner_id: int) -> Optional[Person]:
+        """Обновить персону"""
+        person = self._person_repo.get_by_id(person_id)
+        
+        if not person or person.owner_id != owner_id:
+            return None
+        
+        # Обновляем только переданные поля
+        if dto.first_name is not None:
+            person.first_name = dto.first_name
+        if dto.last_name is not None:
+            person.last_name = dto.last_name
+        if dto.birth_date is not None:
+            person.birth_date = dto.birth_date
+        if dto.death_date is not None:
+            person.death_date = dto.death_date
+        if dto.gender is not None:
+            person.gender = dto.gender
+        if dto.notes is not None:
+            person.notes = dto.notes
+        
+        return self._person_repo.update(person)
+```
+
+**Файл:** `core/application/use_cases/person/delete_person.py`
+
+```python
+from typing import Optional
+from core.domain.repositories.person_repository import IPersonRepository
+
+
+class DeletePersonUseCase:
+    def __init__(self, person_repo: IPersonRepository):
+        self._person_repo = person_repo
+    
+    def execute(self, person_id: int, owner_id: int) -> bool:
+        """Удалить персону (каскадно удаляются связи)"""
+        person = self._person_repo.get_by_id(person_id)
+        
+        if not person or person.owner_id != owner_id:
+            return False
+        
+        self._person_repo.delete(person_id)
+        return True
+```
+
+**Файл:** `core/application/use_cases/person/get_all_persons.py`
+
+```python
+from typing import List
+from core.domain.entities.person import Person
+from core.domain.repositories.person_repository import IPersonRepository
+
+
+class GetAllPersonsUseCase:
+    def __init__(self, person_repo: IPersonRepository):
+        self._person_repo = person_repo
+    
+    def execute(self, owner_id: int) -> List[Person]:
+        """Получить всех персон владельца"""
+        return self._person_repo.get_all(owner_id)
+```
+
 **Файл:** `core/application/use_cases/relationship/create_relationship.py`
 
 ```python
@@ -350,22 +426,63 @@ class CreateRelationshipUseCase:
         self._relationship_repo = relationship_repo
         self._person_repo = person_repo
     
-    def execute(self, dto: CreateRelationshipDTO) -> Relationship:
+    def execute(self, dto: CreateRelationshipDTO, owner_id: int) -> Relationship:
         """Создать связь между людьми"""
-        # Проверить что обе персоны существуют
+        # Проверить что обе персоны существуют и принадлежат пользователю
         person1 = self._person_repo.get_by_id(dto.person_id)
         person2 = self._person_repo.get_by_id(dto.related_person_id)
         
         if not person1 or not person2:
             raise ValueError("Одна из персон не найдена")
         
+        if person1.owner_id != owner_id or person2.owner_id != owner_id:
+            raise ValueError("Персоны не принадлежат пользователю")
+        
         relationship = Relationship(
             person_id=dto.person_id,
             related_person_id=dto.related_person_id,
-            relationship_type=dto.relationship_type
+            relationship_type=dto.relationship_type,
+            owner_id=owner_id
         )
         
         return self._relationship_repo.create(relationship)
+```
+
+**Файл:** `core/application/use_cases/relationship/get_relationships.py`
+
+```python
+from typing import List
+from core.domain.entities.relationship import Relationship
+from core.domain.repositories.relationship_repository import IRelationshipRepository
+
+
+class GetRelationshipsUseCase:
+    def __init__(self, relationship_repo: IRelationshipRepository):
+        self._relationship_repo = relationship_repo
+    
+    def execute(self, person_id: int) -> List[Relationship]:
+        """Получить все связи персоны"""
+        return self._relationship_repo.get_by_person_id(person_id)
+```
+
+**Файл:** `core/application/use_cases/relationship/delete_relationship.py`
+
+```python
+from core.domain.repositories.relationship_repository import IRelationshipRepository
+
+
+class DeleteRelationshipUseCase:
+    def __init__(self, relationship_repo: IRelationshipRepository):
+        self._relationship_repo = relationship_repo
+    
+    def execute(self, relationship_id: int) -> bool:
+        """Удалить связь"""
+        rel = self._relationship_repo.get_by_id(relationship_id)
+        if not rel:
+            return False
+        
+        self._relationship_repo.delete(relationship_id)
+        return True
 ```
 
 ### Итоги этапа 2
@@ -433,15 +550,14 @@ def get_db():
 **Файл:** `core/infrastructure/config/settings.py`
 
 ```python
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    
     database_url: str = "sqlite:///./genealogy.db"
     db_echo: bool = False
-    
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
@@ -452,34 +568,37 @@ settings = Settings()
 **Файл:** `core/infrastructure/database/models/person_model.py`
 
 ```python
-from sqlalchemy import Column, Integer, String, Date, Enum
-from sqlalchemy.orm import relationship
+from __future__ import annotations
+
+from sqlalchemy import String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from core.infrastructure.database.models.base import Base
-from datetime import date
 
 
 class PersonModel(Base):
     __tablename__ = "person"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    first_name = Column(String(100), nullable=False)
-    last_name = Column(String(100), nullable=False)
-    birth_date = Column(String(50), nullable=True)
-    death_date = Column(String(50), nullable=True)
-    gender = Column(String(1), default="M")
-    notes = Column(String(1000), nullable=True)
-    owner_id = Column(Integer, nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    birth_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    death_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    gender: Mapped[str] = mapped_column(String(1), default="M")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_id: Mapped[int | None] = mapped_column(nullable=True)
     
     # Отношения
-    relationships_as_person = relationship(
-        "RelationshipModel",
-        foreign_keys="RelationshipModel.person_id",
-        back_populates="person"
+    relationships_as_person: Mapped[list[RelationshipModel]] = relationship(
+        back_populates="person",
+        foreign_keys="[RelationshipModel.person_id]",
+        cascade="all, delete-orphan"
     )
     
-    def to_domain(self):
+    def to_domain(self) -> "Person":
         """Преобразовать в доменную сущность"""
-        from core.domain.entities.person import Person, Gender
+        from core.domain.entities.person import Gender, Person
+        
         return Person(
             id=self.id,
             first_name=self.first_name,
@@ -509,22 +628,28 @@ class PersonModel(Base):
 **Файл:** `core/infrastructure/database/models/relationship_model.py`
 
 ```python
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
+from __future__ import annotations
+
+from sqlalchemy import String, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from core.infrastructure.database.models.base import Base
 
 
 class RelationshipModel(Base):
     __tablename__ = "relationship"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    person_id = Column(Integer, ForeignKey("person.id"), nullable=False)
-    related_person_id = Column(Integer, ForeignKey("person.id"), nullable=False)
-    relationship_type = Column(String(50), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("person.id"), nullable=False)
+    related_person_id: Mapped[int] = mapped_column(ForeignKey("person.id"), nullable=False)
+    relationship_type: Mapped[str] = mapped_column(String(50), nullable=False)
     
-    person = relationship("PersonModel", foreign_keys=[person_id], back_populates="relationships_as_person")
+    person: Mapped[PersonModel] = relationship(
+        back_populates="relationships_as_person",
+        foreign_keys=[person_id]
+    )
     
-    def to_domain(self):
+    def to_domain(self) -> "Relationship":
         from core.domain.entities.relationship import Relationship, RelationshipType
         return Relationship(
             id=self.id,
@@ -1005,3 +1130,73 @@ def test_create_person():
 Эта дорожная карта позволяет постепенно перейти от простого прототипа к масштабируемой архитектуре. Каждый этап независимо тестируем и может быть завершён за несколько дней. 
 
 Ключевой принцип: **не переписывать всё сразу**, а постепенно рефакторить, сохраняя рабочую систему на каждом этапе.
+
+---
+
+## Итоговая оценка выполнимости
+
+### ✅ Что исправлено в этом документе
+
+| Было | Стало |
+|------|-------|
+| Старый стиль SQLAlchemy (`Column`) | Современный стиль (`Mapped[]`) |
+| Pydantic v1 (`class Config`) | Pydantic v2 (`model_config`) |
+| Удалён `future=True` (устарело) | Корректная конфигурация engine |
+| Missing Use Cases | Добавлены Update, Delete, GetAll |
+| Отсутствовала типизация в GUI | Добавлены type hints |
+
+### 📊 Оценка для начинающего разработчика
+
+| Уровень опыта | Реалистичный срок | Примечание |
+|---------------|-------------------|------------|
+| **Начинающий** (0-1 год Python) | 35-45 дней | +50% буфер на изучение |
+| **Средний** (1-3 года Python) | 25-35 дней | +30% буфер |
+| **Опытный** (3+ года Python) | 20-25 дней | Базовая оценка |
+
+### ⚠️ Критические риски
+
+| Риск | Вероятность | Как снизить |
+|------|-------------|-------------|
+| **Нарушение Dependency Rule** | Высокая | Проверять `grep -r "from core.infrastructure" core/domain/` |
+| **Непонимание session lifecycle** | Средняя | Читать документацию SQLAlchemy, писать интеграционные тесты |
+| **Переусложнение архитектуры** | Средняя | Начать с минимума, добавлять только при необходимости |
+| **Выгорание от рефакторинга** | Средняя | Делать перерывы между этапами, праздновать завершение |
+
+### 📝 Чек-лист перед стартом
+
+- [ ] Прочитал `docs/ARCHITECTURE.md` и понял слои
+- [ ] Установил Python 3.12+ и SQLAlchemy 2.0.25+
+- [ ] Настроил IDE (PyCharm/VSCode) с поддержкой type hints
+- [ ] Понимаю разницу между `domain` и `infrastructure`
+- [ ] Протестировал простой CRUD на SQLAlchemy (мини-проект)
+- [ ] Знаю, как запускать pytest и писать юнит-тесты
+
+### 🚀 Рекомендации по выполнению
+
+1. **Этап 0-1 (неделя 1)**: Сфокусируйся на Domain Layer — это фундамент
+2. **Этап 2-3 (недели 2-3)**: Application + Infrastructure — самая сложная часть
+3. **Этап 4 (неделя 4)**: Desktop клиент — уже легче, т.к. Use Cases готовы
+4. **Этап 5-6 (недели 5-6)**: Опционально — API и тесты
+
+**Не торопись.** Лучше сделать за 45 дней качественно, чем за 20 с багами.
+
+### 📚 Полезные ресурсы
+
+| Тема | Ресурс |
+|------|--------|
+| Clean Architecture | [Clean Architecture in Python (YouTube)](https://www.youtube.com/results?search_query=clean+architecture+python) |
+| SQLAlchemy 2.0 | [Official Documentation](https://docs.sqlalchemy.org/en/20/) |
+| Dependency Injection | [FastAPI Depends (пример DI)](https://fastapi.tiangolo.com/tutorial/dependencies/) |
+| Type Hints | [PEP 484](https://peps.python.org/pep-0484/) |
+| Testing | [Pytest Documentation](https://docs.pytest.org/) |
+
+---
+
+**Этот план выполним** при условии:
+1. Посвящать проекту 1-2 часа в день
+2. Не пропускать этапы тестирования
+3. Задавать вопросы при блокирующих проблемах
+4. Готовность переписать код, если понял, что архитектура неверна
+
+Удачи! 🚀
+

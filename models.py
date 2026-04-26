@@ -28,8 +28,15 @@ class Person(Base):
 
     relationships: Mapped[list['Relationship']] = relationship(
         back_populates='person',
+        foreign_keys='Relationship.person_id',
         cascade='all, delete-orphan'
     )
+
+    related_relationship: Mapped[list['Relationship']] = relationship(
+        foreign_keys='Relationship.person_id_related',
+        viewonly=True
+    )
+
 
     def __repr__(self):
         return (f'Person(first_name={self.first_name}, last_name={self.last_name}, '

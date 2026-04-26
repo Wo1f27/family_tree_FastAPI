@@ -685,3 +685,480 @@ people = session.execute(stmt).scalars().all()
 ## Итог
 
 Проект использует современные практики SQLAlchemy 2.0+ с type hints, декларативными моделями и явным Core API для запросов. Код готов к развитию и поддерживает статическую типизацию.
+
+---
+
+## Система автообновления через GitHub Releases
+
+### Архитектура обновления
+
+Приложение проверяет наличие новых версий при запуске и предлагает пользователю обновиться.
+
+**Ключевое правило:** База данных и пользовательские файлы **никогда** не удаляются при обновлении.
+
+### 1. Структура проекта для обновлений
+
+```
+genealogy_app/
+├── app/                          # Папка приложения (удаляется при переустановке)
+│   ├── main.py
+│   ├── gui.py
+│   ├── database.py
+│   ├── models.py
+│   ├── config.py                 # Конфиг с путями и версией
+│   ├── updater.py                # Модуль автообновления
+│   └── version.txt               # Текущая версия (например, "1.0.0")
+├── data/                         # Папка данных (сохраняется при обновлениях)
+│   └── genealogy.db              # База данных пользователя
+├── dist/                         # Папка для сборки установщика
+│   └── genealogy_app_setup.exe
+├── setup.iss                     # Конфигурация Inno Setup
+└── requirements.txt
+```
+
+### 2. Конфигурация путей (config.py)
+
+```python
+"""Конфигурация приложения и путей"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+def get_app_dir() -> Path:
+    """
+    Папка с программными файлами.
+    При обновлении эта папка удаляется и создаётся заново.
+    """
+    if getattr(sys, 'frozen', False):
+        # Запуск скомпилированного .exe
+        return Path(sys.executable).parent
+    # Запуск из исходного кода
+    return Path(__file__).parent
+
+
+def get_data_dir() -> Path:
+    """
+    Папка с данными пользователя.
+    Сохраняется между обновлениями.
+    """
+    if os.name == 'nt':  # Windows
+        data_path = Path(os.environ['APPDATA']) / 'GenealogyApp'
+    else:  # Linux/macOS
+        data_path = Path.home() / '.local' / 'share' / 'GenealogyApp'
+    
+    data_path.mkdir(parents=True, exist_ok=True)
+    return data_path
+
+
+def get_db_path() -> Path:
+    """Путь к базе данных"""
+    return get_data_dir() / 'genealogy.db'
+
+
+def get_version() -> str:
+    """Получить текущую версию приложения"""
+    version_file = get_app_dir() / 'version.txt'
+    if version_file.exists():
+        return version_file.read_text().strip()
+    return '0.0.0'
+
+
+# GitHub репозиторий для обновлений
+GITHUB_REPO = 'your-username/genealogy-app'  # Заменить на свой репозиторий
+```
+
+### 3. Модуль обновления (updater.py)
+
+```python
+"""Модуль автообновления через GitHub Releases"""
+from __future__ import annotations
+
+import json
+import os
+import platform
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+import requests
+
+from config import GITHUB_REPO, get_app_dir, get_data_dir, get_version
+
+
+class Updater:
+    """Класс для управления обновлениями"""
+    
+    def __init__(self) -> None:
+        self.current_version = get_version()
+        self.app_dir = get_app_dir()
+        self.data_dir = get_data_dir()
+    
+    def check_for_update(self) -> dict | None:
+        """
+        Проверить наличие новой версии на GitHub.
+        
+        Возвращает dict с информацией об обновлении или None.
+        """
+        api_url = f'https://api.github.com/repos/{GITHUB_REPO}/releases/latest'
+        
+        try:
+            response = requests.get(api_url, timeout=10)
+            response.raise_for_status()
+            release_data = response.json()
+            
+            latest_version = release_data['tag_name'].lstrip('v')
+            
+            # Сравнить версии (простая версия сравнения)
+            if self._compare_versions(latest_version, self.current_version) > 0:
+                # Найти ассет для текущей платформы
+                asset = self._find_asset_for_platform(release_data['assets'])
+                if asset:
+                    return {
+                        'version': latest_version,
+                        'name': release_data['name'],
+                        'body': release_data['body'],  # Примечания к релизу
+                        'download_url': asset['browser_download_url'],
+                        'published_at': release_data['published_at']
+                    }
+        except (requests.RequestException, json.JSONDecodeError) as e:
+            print(f'Ошибка проверки обновления: {e}')
+        
+        return None
+    
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """
+        Сравнить две версии (SemVer).
+        
+        Возвращает:
+            1 если v1 > v2
+           -1 если v1 < v2
+            0 если v1 == v2
+        """
+        def normalize(v: str) -> list[int]:
+            return [int(x) for x in v.split('.')[:3]]  # MAJOR.MINOR.PATCH
+        
+        n1, n2 = normalize(v1), normalize(v2)
+        
+        for a, b in zip(n1, n2):
+            if a > b:
+                return 1
+            if a < b:
+                return -1
+        
+        return 0
+    
+    def _find_asset_for_platform(self, assets: list[dict]) -> dict | None:
+        """Найти ассет для текущей операционной системы"""
+        system = platform.system().lower()
+        arch = platform.machine().lower()
+        
+        # Приоритет поиска ассетов
+        if system == 'windows':
+            if 'amd64' in arch or 'x86_64' in arch:
+                patterns = ['_windows_x64.exe', '_win64.exe', '_setup.exe']
+            else:
+                patterns = ['_windows_x86.exe', '_win32.exe']
+        elif system == 'linux':
+            patterns = ['_linux_x64.deb', '_linux_x64.rpm', '_linux.tar.gz']
+        elif system == 'darwin':
+            patterns = ['_macos.dmg', '_macos.tar.gz']
+        else:
+            patterns = []
+        
+        for asset in assets:
+            name = asset['name'].lower()
+            for pattern in patterns:
+                if pattern in name:
+                    return asset
+        
+        return assets[0] if assets else None  #Fallback на первый ассет
+    
+    def download_update(self, download_url: str) -> Path:
+        """Скачать обновление во временную папку"""
+        response = requests.get(download_url, stream=True)
+        response.raise_for_status()
+        
+        temp_dir = Path(tempfile.gettempdir())
+        installer_path = temp_dir / 'genealogy_update.exe'
+        
+        with open(installer_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        return installer_path
+    
+    def apply_update(self, installer_path: Path) -> None:
+        """
+        Запустить установщик для обновления.
+        
+        Текущее приложение закроется, установщик запустится с правами администратора.
+        """
+        # Создаём скрипт для перезапуска после установки
+        restart_script = self.app_dir / 'restart_after_update.bat'
+        
+        script_content = f'''
+@echo off
+timeout /t 3 /nobreak >nul
+start "" "{installer_path}" /SILENT /SUPPRESSMSGBOXES
+timeout /t 5 /nobreak >nul
+del "%~f0"
+        '''
+        
+        restart_script.write_text(script_content)
+        
+        # Запускаем скрипт и закрываем приложение
+        subprocess.Popen(['cmd', '/c', str(restart_script)], 
+                        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+        sys.exit(0)
+    
+    def update_and_restart(self) -> None:
+        """Полный цикл обновления"""
+        update_info = self.check_for_update()
+        
+        if not update_info:
+            print('Нет доступных обновлений')
+            return
+        
+        print(f'Найдена новая версия: {update_info["version"]}')
+        
+        # Скачать
+        installer_path = self.download_update(update_info['download_url'])
+        print(f'Обновление скачано: {installer_path}')
+        
+        # Применить
+        self.apply_update(installer_path)
+
+
+def create_backup() -> Path:
+    """Создать бэкап базы данных перед обновлением"""
+    db_path = get_data_dir() / 'genealogy.db'
+    backup_dir = get_data_dir() / 'backups'
+    backup_dir.mkdir(exist_ok=True)
+    
+    timestamp = Path(db_path).stat().st_mtime
+    backup_name = f'genealogy_backup_{timestamp}.db'
+    backup_path = backup_dir / backup_name
+    
+    shutil.copy2(db_path, backup_path)
+    print(f'Бэкап создан: {backup_path}')
+    
+    return backup_path
+```
+
+### 4. Интеграция в GUI (gui.py)
+
+Добавить кнопку "Проверить обновления" и проверку при запуске:
+
+```python
+from updater import Updater, create_backup
+import threading
+
+class GenealogyApp:
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        # ... существующий код ...
+        
+        # Проверить обновление в фоновом потоке
+        self._check_update_background()
+    
+    def _check_update_background(self) -> None:
+        """Проверить обновление в отдельном потоке"""
+        def check() -> None:
+            updater = Updater()
+            update_info = updater.check_for_update()
+            
+            # Вернуться в UI поток для показа сообщения
+            self.root.after(0, lambda: self._show_update_notification(update_info))
+        
+        thread = threading.Thread(target=check, daemon=True)
+        thread.start()
+    
+    def _show_update_notification(self, update_info: dict | None) -> None:
+        """Показать уведомление об обновлении"""
+        if update_info:
+            result = messagebox.askyesno(
+                'Доступно обновление',
+                f'Найдена новая версия: {update_info["version"]}\n\n'
+                f'{update_info["name"]}\n\n'
+                f'Установить сейчас?'
+            )
+            
+            if result:
+                # Бэкап перед обновлением
+                create_backup()
+                
+                # Запустить обновление
+                updater = Updater()
+                updater.update_and_restart()
+        else:
+            print('Приложение актуально')
+    
+    def _check_updates_manual(self) -> None:
+        """Ручная проверка обновлений (для кнопки в меню)"""
+        self._check_update_background()
+```
+
+### 5. Добавление кнопки в интерфейс
+
+```python
+def _create_widgets(self) -> None:
+    # Верхняя панель с кнопками
+    top_frame = ttk.Frame(self.root, padding=10)
+    top_frame.pack(fill=tk.X)
+    
+    ttk.Button(top_frame, text="Добавить человека", command=self._add_person).pack(side=tk.LEFT, padx=5)
+    ttk.Button(top_frame, text="Редактировать", command=self._edit_person).pack(side=tk.LEFT, padx=5)
+    ttk.Button(top_frame, text="Удалить", command=self._delete_person).pack(side=tk.LEFT, padx=5)
+    ttk.Button(top_frame, text="Связи", command=self._manage_relationships).pack(side=tk.LEFT, padx=5)
+    
+    # Кнопка проверки обновлений (справа)
+    ttk.Button(top_frame, text="Проверить обновления", 
+               command=self._check_updates_manual).pack(side=tk.RIGHT, padx=5)
+    
+    # ... остальной код ...
+```
+
+### 6. Создание установщика (Inno Setup)
+
+Файл `setup.iss`:
+
+```ini
+; Script generated by the Inno Setup Script Wizard.
+; SEE THE DOCUMENTATION FOR DETAILS ON CREATING .ISS SCRIPT FILES!
+
+#define MyAppName "Genealogy App"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Your Name"
+#define MyAppExeName "main.exe"
+
+[Setup]
+AppId={{YOUR-GUID-HERE}}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+OutputDir=dist
+OutputBaseFilename=genealogy_app_setup_{#MyAppVersion}
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+
+; НЕ удаляем папку с данными при деинсталляции
+; Uninstallable=yes
+
+[Languages]
+Name: "russian"; MessagesFile: "compiler:Languages\\Russian.isl"
+
+[Files]
+Source: "app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+```
+
+### 7. GitHub Actions для автоматического создания релизов
+
+Файл `.github/workflows/build.yml`:
+
+```yaml
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Триггер на теги типа v1.0.0
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller requests
+      
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --windowed --name main --icon=icon.ico main.py
+      
+      - name: Create installer (Inno Setup)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: setup.iss
+      
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.exe
+          generate_release_notes: true
+```
+
+### 8. Процесс выпуска обновления
+
+1. **Изменить версию** в `app/version.txt`:
+   ```
+   1.0.0  →  1.1.0
+   ```
+
+2. **Создать тег и пушить**:
+   ```bash
+   git add app/version.txt
+   git commit -m "Release v1.1.0"
+   git tag v1.1.0
+   git push origin main --tags
+   ```
+
+3. **GitHub Actions автоматически**:
+   - Скомпилирует `.exe`
+   - Создаст установщик
+   - Опубликует релиз на GitHub
+
+4. **Пользователи получат уведомление** при следующем запуске приложения
+
+---
+
+## Важные замечания
+
+### Защита данных при обновлении
+
+| Что сохраняется | Что удаляется |
+|-----------------|---------------|
+| `%APPDATA%\GenealogyApp\genealogy.db` | `%PROGRAMFILES%\GenealogyApp\` (папка программы) |
+| `%APPDATA%\GenealogyApp\backups\` | Временные файлы приложения |
+| Настройки пользователя | Кэш и логи |
+
+### Рекомендации
+
+1. **Всегда создавать бэкап** перед обновлением
+2. **Использовать SemVer** (MAJOR.MINOR.PATCH) для версий
+3. **Тестировать обновление** на тестовой машине перед релизом
+4. **Хранить миграции БД** через Alembic для изменения схемы данных
+5. **Добавить откат** — возможность вернуть старую версию
+
+### Безопасность
+
+- Подписывать релизы цифровым сертификатом (для Windows)
+- Проверять целостность скачанного файла (хеш-сумма)
+- Использовать HTTPS для GitHub API
+- Не хранить токены/секреты в коде
+

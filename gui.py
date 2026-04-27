@@ -84,11 +84,14 @@ class GenealogyApp:
         stmt = select(Person).order_by(Person.last_name, Person.first_name)
         people = self.db_session.execute(stmt).scalars().all()
 
-
-
         for person in people:
-            gender_str = 'М' if person.gender == Gender.MALE else \
-                'Ж' if person.gender == Gender.FEMALE else 'Другой'
+            # Конвертация Enum для отображения
+            if person.gender == Gender.MALE:
+                gender_str = 'Мужской'
+            elif person.gender == Gender.FEMALE:
+                gender_str = 'Женский'
+            else:
+                gender_str = 'Другой'
 
             self.tree.insert('', tk.END, values=(
                 person.id,
@@ -116,7 +119,11 @@ class GenealogyApp:
 
     def _add_person(self) -> None:
         dialog = PersonDialog(self.root, 'Добавить человека')
+        # Ждём пока диалог закроется (modal)
+        dialog.wait_window()
+
         if dialog.result:
+            print(f'Добавляем персону: {dialog.result.first_name} {dialog.result.last_name}')
             person = Person(
                 first_name=dialog.result.first_name,
                 last_name=dialog.result.last_name,
@@ -126,9 +133,12 @@ class GenealogyApp:
                 date_of_death=dialog.result.date_of_death,
                 biography=dialog.result.biography
             )
-            self._db_session.add(person)
-            self._db_session.commit()
+            self.db_session.add(person)
+            self.db_session.commit()
+            print(f'Персона добавлена с ID: {person.id}')
             self._load_people()
+        else:
+            print('Отмена добавления')
 
     def _edit_person(self) -> None:
         person = self._get_selected_person()
@@ -173,11 +183,11 @@ class GenealogyApp:
     def _show_person_info(self):
         person = self._get_selected_person()
         if not person:
-            self.info_label.config(text="Выберите человека")
+            self.info_label.config(text='Выберите человека')
             return
 
         stmt = select(Relationship).where(Relationship.person_id == person.id)
-        relationships = self.db_session.execuete(stmt).scalars().all()
+        relationships = self.db_session.execute(stmt).scalars().all()
 
         rel_text: list[str] = []
         for rel in relationships:
@@ -198,88 +208,99 @@ class GenealogyApp:
 
 
 class PersonDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, title: str, person: Person) -> None:
+    def __init__(self, parent: tk.Tk, title: str, person: Person | None = None) -> None:
         super().__init__(parent)
-        self.title = title
-        self.person = person
-        self.geometry("400x300")
+        self.title(title)
+        self.geometry('400x500')
         self.result: PersonData | None = None
 
-        self._create_widgets()
+        self._create_widgets(person)
 
     def _create_widgets(self, person: Person | None) -> None:
-        ttk.Label(self, text='Имя: ').pack(pady=5)
-        self.first_name_var = tk.StringVar(value=person.first_name if person else '')
+        # Имя
+        ttk.Label(self, text='Имя:').pack(pady=5)
+        self.first_name_var = tk.StringVar(
+            value=person.first_name if person else ''
+        )
         ttk.Entry(self, textvariable=self.first_name_var, width=30).pack()
 
-        ttk.Label(self, text='Отчество: ').pack(pady=5)
-        self.middle_name_var = tk.StringVar(value=person.middle_name if person else '')
-        ttk.Entry(self, textvariable=self.middle_name_var, width=30).pack()
-
-        ttk.Label(self, text='Фамилия: ').pack(pady=5)
-        self.last_name_var = tk.StringVar(value=person.last_name if person else '')
+        # Фамилия
+        ttk.Label(self, text='Фамилия:').pack(pady=5)
+        self.last_name_var = tk.StringVar(
+            value=person.last_name if person else ''
+        )
         ttk.Entry(self, textvariable=self.last_name_var, width=30).pack()
 
-        ttk.Label(self, text='Пол: ').pack(pady=5)
-        self.gender_var = tk.StringVar(value=person.gender if person else 'MALE')
+        # Отчество
+        ttk.Label(self, text='Отчество:').pack(pady=5)
+        self.middle_name_var = tk.StringVar(
+            value=person.middle_name if person else ''
+        )
+        ttk.Entry(self, textvariable=self.middle_name_var, width=30).pack()
+
+        # Пол с Combobox
+        ttk.Label(self, text='Пол:').pack(pady=5)
+        gender_value = person.gender.value if person and person.gender else 'male'
+        self.gender_var = tk.StringVar(value=gender_value)
         gender_combo = ttk.Combobox(
-            self, textvariable=self.gender_var,
+            self,
+            textvariable=self.gender_var,
             values=['male', 'female', 'other'],
             state='readonly',
             width=10
         )
         gender_combo.pack()
 
-        ttk.Label(self, text='Дата рождения: ').pack(pady=5)
-        birth_date_str = ''
-        if person and person.date_of_birth:
-            birth_date_str = person.date_of_birth.strftime('%Y-%m-%d')
+        # Дата рождения
+        ttk.Label(self, text='Дата рождения (YYYY-MM-DD):').pack(pady=5)
+        birth_date_str = person.date_of_birth.strftime('%Y-%m-%d') if person and person.date_of_birth else ''
         self.birth_date_var = tk.StringVar(value=birth_date_str)
         ttk.Entry(self, textvariable=self.birth_date_var, width=30).pack()
 
-        ttk.Label(self, text='Дата смерти (опционально): ').pack(pady=5)
-        death_date_str = ''
-        if person and person.date_of_death:
-            death_date_str = person.date_of_death.strftime('%Y-%m-%d')
+        # Дата смерти
+        ttk.Label(self, text='Дата смерти (опционально):').pack(pady=5)
+        death_date_str = person.date_of_death.strftime('%Y-%m-%d') if person and person.date_of_death else ''
         self.death_date_var = tk.StringVar(value=death_date_str)
         ttk.Entry(self, textvariable=self.death_date_var, width=30).pack()
 
-        ttk.Label(self, text='Биография(опционально): ').pack(pady=5)
-        self.biography = tk.StringVar(value=person.biography if person else '')
-        ttk.Entry(self, textvariable=self.biography, width=30).pack()
+        # Биография
+        ttk.Label(self, text='Биография (опционально):').pack(pady=5)
+        self.biography_var = tk.StringVar(
+            value=person.biography if person else ''
+        )
+        ttk.Entry(self, textvariable=self.biography_var, width=30).pack()
 
+        # Кнопки
         btn_frame = ttk.Frame(self)
-        btn_frame.pack(pady=10)
+        btn_frame.pack(pady=20)
+        ttk.Button(btn_frame, text='OK', command=self._on_ok).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=10)
 
-        ttk.Button(btn_frame, text='Сохранить', command=self._on_save).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=5)
-
-    def _on_save(self) -> None:
-        first_name = self.first_name_var
-        last_name = self.last_name_var
+    def _on_ok(self) -> None:
+        first_name = self.first_name_var.get().strip()
+        last_name = self.last_name_var.get().strip()
 
         if not first_name or not last_name:
-            messagebox.showerror("Ошибка", "Необходимо заполнить все поля")
+            messagebox.showerror('Ошибка', 'Имя и фамилия обязательны')
+            return
 
+        # Конвертация пола в Enum
         gender_value = self.gender_var.get()
         gender = Gender(gender_value) if gender_value else None
-
-        date_birth = self._parse_date(self.birth_date_var.get())
-        death_date = self._parse_date(self.death_date_var.get())
 
         self.result = PersonData(
             first_name=first_name,
             last_name=last_name,
-            middle_name=self.middle_name_var,
+            middle_name=self.middle_name_var.get().strip() or None,
             gender=gender,
-            date_of_birth=date_birth,
-            date_of_death=death_date,
-            biography=self.biography
+            date_of_birth=self._parse_date(self.birth_date_var.get()),
+            date_of_death=self._parse_date(self.death_date_var.get()),
+            biography=self.biography_var.get().strip() or None
         )
         self.destroy()
 
-    @classmethod
-    def _parse_date(cls, date_str: str) -> date | None:
+    @staticmethod
+    def _parse_date(date_str: str) -> date | None:
         if not date_str.strip():
             return None
         try:

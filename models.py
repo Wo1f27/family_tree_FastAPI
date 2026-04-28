@@ -37,6 +37,12 @@ class Person(Base):
         viewonly=True
     )
 
+    @property
+    def gender_enum(self) -> Gender:
+        if isinstance(self.gender, str):
+            return Gender(self.gender)
+        return self.gender
+
 
     def __repr__(self):
         return (f'Person(first_name={self.first_name}, last_name={self.last_name}, '

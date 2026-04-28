@@ -50,13 +50,14 @@ class GenealogyApp:
         # Таблица людей
         middle_frame = ttk.Frame(self.root, padding=10)
         middle_frame.pack(fill=tk.BOTH, expand=True)
-        columns = ('Фамилия', 'Имя',  'Отчество', 'Пол', 'Дата рождения', 'Дата смерти', 'Биография')
+        columns = ('id', 'Фамилия', 'Имя',  'Отчество', 'Пол', 'Дата рождения', 'Дата смерти', 'Биография')
         self.tree = ttk.Treeview(middle_frame, columns=columns, show='headings')
 
         for col in columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100)
 
+        self.tree.column('id', width=0, stretch=False)
         self.tree.column('Имя', width=120)
         self.tree.column('Фамилия', width=150)
         self.tree.column('Отчество', width=150)
@@ -67,7 +68,11 @@ class GenealogyApp:
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.tree.bind('<Double-1>', lambda e: self._edit_person)
+        # ⭐ Привязка двойного клика для редактирования
+        self.tree.bind('<Double-1>', lambda e: self._edit_person())
+
+        # ⭐ Привязка выбора строки для отображения информации
+        self.tree.bind('<<TreeviewSelect>>', lambda e: self._show_person_info())
 
         # Панель информации о выбранном человеке
         bottom_frame = ttk.Frame(self.root, padding=10)
@@ -147,6 +152,7 @@ class GenealogyApp:
             return
 
         dialog = PersonDialog(self.root, 'Редактировать', person)
+        dialog.wait_window()
         if dialog.result:
             person.first_name = dialog.result.first_name
             person.last_name = dialog.result.last_name
@@ -198,9 +204,26 @@ class GenealogyApp:
                     f"{rel.relationship_type}: {related.first_name} {related.last_name}"
                 )
 
+        # ⭐ Отображение всех полей
         info = f"{person.first_name} {person.last_name}\n"
-        info += f"Дата рождения: {person.date_of_birth or '-'}\n"
-        info += f"Пол: {person.gender}\n"
+        info += f"Отчество: {person.middle_name or '-'}\n"
+
+        # Конвертация пола для отображения
+        if person.gender:
+            if isinstance(person.gender, Gender):
+                gender_str = person.gender.value
+            else:
+                gender_str = person.gender
+        else:
+            gender_str = '-'
+
+        info += f"Пол: {gender_str}\n"
+        info += f"Дата рождения: {person.date_of_birth.strftime('%Y-%m-%d') if person.date_of_birth else '-'}\n"
+        info += f"Дата смерти: {person.date_of_death.strftime('%Y-%m-%d') if person.date_of_death else '-'}\n"
+
+        if person.biography:
+            info += f"Биография: {person.biography}\n"
+
         if rel_text:
             info += "\nСвязи:\n" + "\n".join(rel_text)
 
@@ -240,7 +263,16 @@ class PersonDialog(tk.Toplevel):
 
         # Пол с Combobox
         ttk.Label(self, text='Пол:').pack(pady=5)
-        gender_value = person.gender.value if person and person.gender else 'male'
+
+        # ⭐ Проверка типа: Enum или строка
+        if person and person.gender:
+            if isinstance(person.gender, Gender):
+                gender_value = person.gender.value
+            else:
+                gender_value = person.gender  # Уже строка из БД
+        else:
+            gender_value = 'male'
+
         self.gender_var = tk.StringVar(value=gender_value)
         gender_combo = ttk.Combobox(
             self,

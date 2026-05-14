@@ -1,12 +1,46 @@
 # План задач MVP — Family Tree
 
-> **Контекст:** Задачи рассчитаны на одного бэкенд-разработчика **без опыта в подобных проектах**. Сложности увеличены относительно «опытной» оценки, добавлены задачи на изучение технологий. Desktop-визуализация включена как полноценный клиент MVP.
+> **Контекст:** Задачи рассчитаны на одного разработчика **без опыта в подобных проектах**, в режиме **обучения**: сначала сохранять и развивать **работающее приложение** (как в репозитории сейчас), затем **постепенно** выносить слои и подключать API, auth и визуализацию дерева — до полного объёма Clean Architecture.
 
-> **Руководство по реализации:** Детальные инструкции с кодом для каждой задачи — в [docs/mvp-guide/](mvp-guide/README.md).
+> **Руководство по реализации:** пошаговые инструкции с примерами кода — в [docs/mvp-guide/](mvp-guide/README.md). Идентификаторы задач **MVP-*** ниже остаются опорными; **порядок выполнения** задайте по **фазам** (раздел 0.1), а не обязательно по номерам строк в старом календаре.
 
 ---
 
-## 0. Архитектурные правила (обязательно для соблюдения)
+## 0.1 Фазы выполнения (рекомендуемый маршрут)
+
+Принцип: **каждая фаза заканчивается запускаемым результатом**, который можно показать и отладить. «Большой» MVP из таблиц ниже — это **конечная цель**, а не обязанность сделать всё подряд до первого запуска.
+
+| Фаза | Название | Что в руках после фазы | Что делать | Связь с задачами MVP-* |
+|------|----------|------------------------|------------|-------------------------|
+| **A** | **Baseline (уже есть)** | Рабочее десктоп-приложение на SQLite + Tkinter | Поддерживать `main.py` → `gui.py`, `models.py`, `database.py`, БД в `data/genealogy.db`. Исправления, мелкие фичи, при желании — разбиение `gui.py` на несколько модулей **без** обязательного `core/` | Вне формальной нумерации; параллельно **MVP-LEARN-02, 05, 06** |
+| **B** | **Упорядоченный монолит** | Тот же стек (Python **3.13+**, SQLAlchemy **2.0+**, Tkinter), но код проще сопровождать | Вынести доступ к БД в отдельные функции/классы («репозитории без интерфейсов»), разнести UI по файлам (`views/`, `dialogs/`), добавить простые **pytest**-тесты на логику без GUI | Подготовка к MVP-INFRA без полной структуры `core/` |
+| **C** | **Ядро + один клиент (Desktop)** | Каталог `core/` (domain → application → infrastructure), Tkinter только вызывает use cases | **MVP-INFRA-01–07**, **MVP-DOM-01–03**, **MVP-APP-*** по необходимости; сначала можно **один пользователь / без JWT**, потом добавить auth по плану | Строки таблиц §1.1–1.3 и выборочно 1.4 |
+| **D** | **Второй клиент (FastAPI)** | Те же use cases с REST + Swagger | **MVP-INFRA-08**, **MVP-API-01–08**, тесты **MVP-TEST-*** | §1.4–1.5, §1.8 |
+| **E** | **Визуализация дерева и полировка** | Web и/или Canvas в Tkinter, деплой по желанию | **MVP-WEB-01–04** и/или **MVP-DESK-08–13** | §1.6–1.7, итерации «полного» календаря §3 |
+
+**Критический путь для обучения:** **A → B → C** (обязательно понять слои на рабочем GUI), затем **D** и **E** по интересу и времени.
+
+---
+
+## 0.2 Текущее состояние репозитория (факт)
+
+Ниже — что **реально лежит в корне проекта** на момент актуализации документации. Целевая структура `core/`, `api/`, `desktop/` из [ARCHITECTURE.md](ARCHITECTURE.md) — это **следующие фазы**, а не текущий обязательный layout.
+
+| Компонент | Путь | Статус |
+|-----------|------|--------|
+| Точка входа | `main.py` | Запускает Tkinter (`from gui import main`) |
+| UI | `gui.py` | Список персон, диалоги, связи (`Relationship` ↔ `Person`) |
+| ORM-модели | `models.py` | SQLAlchemy 2.0 style: `Person`, `Relationship`; связь второго лица — поле **`person_id_related`** |
+| БД | `database.py`, `data/genealogy.db` | SQLite, `init_db()`, `SessionLocal` |
+| Зависимости | `requirements.txt` | В т.ч. FastAPI и др. — **зарезервированы** на фазу D |
+| Каталог `core/` | — | **Отсутствует** в репозитории; описан в документах и mvp-guide как цель фазы C |
+| FastAPI-приложение | — | **Отсутствует** в репозитории; цель фазы D |
+
+Документы `docs/mvp-guide/*.md` содержат примеры путей вида `core/...` и `desktop/...` — их нужно **создавать при миграции** или адаптировать пути под свою структуру на фазе B.
+
+---
+
+## 0.3 Архитектурные правила (обязательно при введении `core/`)
 
 | Правило | Описание | Проверка |
 |---------|----------|----------|
@@ -20,10 +54,12 @@
 
 ---
 
-## 0.1 Известные проблемы в существующем коде (исправить до/во время итерации 1)
+## 0.4 Известные проблемы (чеклист при появлении `core/` и API)
 
-| ID | Проблема | Файл | Исправление | Связанная задача |
-|----|----------|------|-------------|-------------------|
+Пути в таблице — **целевая структура** из mvp-guide; в текущем корне репозитория этих файлов **нет**. Исправлять по мере переноса кода с фазы **B** на **C**.
+
+| ID | Проблема | Файл (после создания) | Исправление | Связанная задача |
+|----|----------|----------------------|-------------|-------------------|
 | BUG-01 | `Person.gender: Gender` — обязательное поле, но `CreatePersonDTO.gender = Field(None)` допускает `None`. `Person(gender=None)` → TypeError | `core/domain/entities/person.py` | Заменить `gender: Gender` на `gender: Gender \| None` | MVP-INFRA-02 |
 | BUG-02 | `PersonRepository.get_by_id_and_owner_id` возвращает `Person`, а не `Person \| None`. При отсутствии записи — AttributeError вместо None | `core/domain/repositories/person_repository.py` | Изменить аннотацию на `-> Person \| None` | MVP-DOM-02 |
 | BUG-03 | `PersonRepository.get_all()` не принимает `owner_id` — загружает ВСЕ персоны из БД | `core/domain/repositories/person_repository.py` | Добавить параметр `owner_id: int \| None = None` | MVP-INFRA-05 |
@@ -31,54 +67,33 @@
 | BUG-05 | `core/infrastructure/database/config.py` создаёт свой `Base = declarative_base()` — дубликат, конфликтует с `models/base.py` | `core/infrastructure/database/config.py` | Удалить `Base`, импортировать из `models` | MVP-INFRA-07 |
 | BUG-06 | `Settings` требует все PostgreSQL-поля без default — падает без `.env`. Нет поддержки SQLite | `core/infrastructure/config/settings.py` | Добавить `DB_TYPE`, defaults для SQLite | MVP-INFRA-07 |
 | BUG-07 | `api/main.py` не имеет CORS, lifespan, exception handlers | `api/main.py` | Полная замена по MVP-API-01 | MVP-API-01 |
-| BUG-08 | `MVP-DESK-02` зависит от `MVP-INFRA-10` — такой задачи не существует | данный файл | Убрать зависимость, заменить на `MVP-INFRA-04` | MVP-DESK-02 |
+| BUG-08 | В таблице задач у `MVP-DESK-02` была ссылка на несуществующую `MVP-INFRA-10` | `MVP_TASK_PLAN.md` | Зависимость: `MVP-DESK-01`, `MVP-INFRA-04` (когда UserRepository готов) | MVP-DESK-02 |
+
+**Legacy (корень репозитория, фаза A):** при расширении `models.py` / `gui.py` держать в уме те же идеи: одно имя поля связи **`person_id_related`** в ORM и в UI; `owner_id` в модели `Person` можно ввести заранее, но фильтрация по владельцу станет обязательной только с multi-user (фаза **C/D**).
 
 ---
 
-## 0.2 Статус реализации (что реально сделано)
+## 0.5 Статус по фазам (актуализировать вручную по мере работы)
 
-| Компонент | Файл | Статус | Комментарий |
-|-----------|------|--------|-------------|
-| Entity User | `core/domain/entities/user.py` | ✅ Готово | Dataclass с валидацией |
-| Entity Person | `core/domain/entities/person.py` | ⚠️ Баг BUG-01 | `gender` не Optional |
-| Entity Relationship | `core/domain/entities/relationship.py` | ✅ Готово | С `get_reverse_type()` |
-| UserRepository interface | `core/domain/repositories/user_repository.py` | ✅ Готово | ABC с 7 методами |
-| PersonRepository interface | `core/domain/repositories/person_repository.py` | ⚠️ Баг BUG-02, BUG-03 | Возврат тип, нет owner_id |
-| RelationshipRepository interface | `core/domain/repositories/relationship_repository.py` | ✅ Готово | ABC с 7 методами |
-| CreateUserDTO | `core/application/dto/user_dto.py` | ✅ Готово | 4 DTO |
-| CreatePersonDTO | `core/application/dto/person_dto.py` | ⚠️ gender=None при Gender обязательном | 3 DTO |
-| CreateUserUseCase | `core/application/use_cases/user/create_user.py` | ⚠️ Баг BUG-04 | Нарушает Dependency Rule |
-| UpdateUserUseCase | `core/application/use_cases/user/update_user.py` | ✅ Готово | |
-| GetPersonUseCase | `core/application/use_cases/person/get_person.py` | ✅ Готово | |
-| CreatePersonUseCase | `core/application/use_cases/person/create_person.py` | ✅ Готово | |
-| UpdatePersonUseCase | `core/application/use_cases/person/update_person.py` | ✅ Готово | |
-| Password service | `core/infrastructure/auth/password_service.py` | ✅ Готово | bcrypt |
-| DB config | `core/infrastructure/database/config.py` | ⚠️ Баг BUG-05, BUG-06 | Только PostgreSQL, дубликат Base |
-| Settings | `core/infrastructure/config/settings.py` | ⚠️ Баг BUG-06 | Нет SQLite, нет defaults |
-| API main | `api/main.py` | ⚠️ Баг BUG-07 | Нет CORS/lifespan |
-| Test fixtures | `tests/fixtures/fixtures.py` | ✅ Готово | mock_user_repo, mock_person_repo |
-| Test CreateUser | `tests/unit/use_cases/test_create_user.py` | ✅ Готово | 3 теста |
-| Test UpdateUser | `tests/unit/use_cases/test_update_user.py` | ✅ Готово | |
-| Test CreatePerson | `tests/unit/use_cases/test_create_person.py` | ✅ Готово | |
-| Test UpdatePerson | `tests/unit/use_cases/test_update_person.py` | ✅ Готово | |
+### Фаза A — сейчас в репозитории
 
-**Не существует (нужно создать с нуля):**
-- SQLAlchemy модели (`models/base.py`, `user_model.py`, `person_model.py`, `relationship_model.py`)
-- Все repository реализации (`sqlalchemy_*_repository.py`)
-- JWT-сервис (`jwt_service.py`) + адаптеры
-- Email-сервис (`email_service.py`, `token_store.py`)
-- Application интерфейсы (`IPasswordService`, `ITokenService`)
-- Auth DTO (`auth_dto.py`, `relationship_dto.py`)
-- Все API роуты (`auth.py`, `users.py`, `persons.py`, `relationships.py`, `tree.py`)
-- API зависимость `get_current_user`
-- Все Desktop views (`login_view.py`, `main_view.py`, `tree_canvas.py`, …)
-- Web шаблоны (`tree.html`, `tree.js`)
-- Alembic конфигурация
-- Корневой `conftest.py`
+| Компонент | Путь | Статус |
+|-----------|------|--------|
+| Запуск Tkinter + SQLite | `main.py`, `gui.py`, `database.py` | Работает |
+| ORM | `models.py` | `Person`, `Relationship`; поле связи **`person_id_related`** |
+| БД | `data/genealogy.db` | SQLite, `echo=True` в dev (при желании выключить) |
+
+### Фазы C–E — создаётся по mvp-guide (пока нет в дереве файлов)
+
+После появления `core/`, реализаций репозиториев, `api/`, `desktop/` (или вашего аналога) сверяйтесь с BUG-01–07 и таблицами §1.
+
+**Типичный чеклист «с нуля»:** SQLAlchemy-модели в `core/infrastructure/database/models/`, реализации репозиториев, JWT и интерфейсы `IPasswordService` / `ITokenService`, роуты FastAPI, отдельные Tkinter-views, Alembic, корневой `conftest.py`, визуализация дерева (Web и/или Canvas).
 
 ---
 
-## 0.3 Задачи на изучение (перед стартом итераций)
+## 0.6 Задачи на изучение (MVP-LEARN-*)
+
+В [mvp-guide/README.md](mvp-guide/README.md) пошаговые **практические** инструкции не дублируют текст LEARN-задач — это нормально. Таблица ниже — **чеклист теории**; его можно проходить **параллельно фазам A–B**, а MVP-LEARN-03/04 отложить до старта фазы **D**.
 
 | ID | Название | Слой | Сложность | Зависимости | Критерии приёмки |
 |----|----------|------|-----------|-------------|-------------------|
@@ -96,12 +111,14 @@
 
 ## 1. Список задач
 
+Зависимости **MVP-LEARN-*** в колонке «Зависимости» — **рекомендация по теории** (см. §0.6), а не жёсткий gate: на фазах **A–B** можно заменить работой с текущим `gui.py` / `models.py`.
+
 ### 1.1 Инфраструктура и база данных
 
 | ID | Название | Слой | Сложность | Зависимости | Требования | Критерии приёмки |
 |----|----------|------|-----------|-------------|------------|-------------------|
 | MVP-INFRA-01 | Настройка проекта: структура папок, pyproject.toml, requirements | Инфраструктура | M | MVP-LEARN-01 | — | Структура соответствует clean architecture, pytest запускается. Добавить `alembic`, `aiosqlite`, `email-validator`, `passlib` в зависимости. Создать корневой `conftest.py` |
-| MVP-INFRA-02 | SQLAlchemy модели: User, Person, Relationship + связи между таблицами | Слой данных | L | MVP-INFRA-02, MVP-LEARN-02 | AUTH-05, PERS-06, PERS-07, REL-02 | Три модели с колонками, ForeignKey, методами to_domain()/from_domain(). **Включает исправление BUG-01** (Person.gender → Optional) и **BUG-05** (удалить дубликат Base из config.py) |
+| MVP-INFRA-02 | SQLAlchemy модели: User, Person, Relationship + связи между таблицами | Слой данных | L | MVP-INFRA-01, MVP-LEARN-02 | AUTH-05, PERS-06, PERS-07, REL-02 | Три модели с колонками, ForeignKey, методами to_domain()/from_domain(). **Включает исправление BUG-01** (Person.gender → Optional) и **BUG-05** (удалить дубликат Base из config.py) |
 | MVP-INFRA-03 | Alembic: инициализация, начальная миграция | Слой данных | M | MVP-INFRA-02 | — | `alembic upgrade head` создаёт таблицы в SQLite |
 | MVP-INFRA-04 | Реализация UserRepository (SQLAlchemy) | Слой данных | L | MVP-INFRA-02, MVP-DOM-01 | AUTH-01, AUTH-02, USER-01 | Все методы интерфейса работают с SQLite, покрыты тестами |
 | MVP-INFRA-05 | Реализация PersonRepository (SQLAlchemy) | Слой данных | L | MVP-INFRA-02, MVP-DOM-02 | PERS-01–PERS-07 | CRUD + get_by_owner_id + get_by_id_and_owner_id работают |
@@ -112,27 +129,27 @@
 
 | ID | Название | Слой | Сложность | Зависимости | Требования | Критерии приёмки |
 |----|----------|------|-----------|-------------|------------|-------------------|
-| MVP-DOM-01 | Entity User + UserRepository интерфейс | Domain | S | MVP-INFRA-01 | AUTH-05, USER-01–USER-04 | Dataclass User с валидацией, ABC-репозиторий ✅ (частично готово) |
+| MVP-DOM-01 | Entity User + UserRepository интерфейс | Domain | S | MVP-INFRA-01 | AUTH-05, USER-01–USER-04 | Dataclass User с валидацией, ABC-репозиторий (пример в mvp-guide; перенос на фазу **C**) |
 | MVP-DOM-02 | Entity Person + PersonRepository интерфейс | Domain | S | MVP-INFRA-01 | PERS-06, PERS-07 | Dataclass Person с owner_id, Gender enum, ABC-репозиторий. **Включает исправление BUG-01** (gender → Optional), **BUG-02** (get_by_id_and_owner_id → Optional), **BUG-03** (get_all с owner_id) |
-| MVP-DOM-03 | Entity Relationship + RelationshipRepository интерфейс | Domain | S | MVP-INFRA-01 | REL-02, REL-06 | Dataclass Relationship, RelationshipType enum, ABC-репозиторий ✅ (частично готово) |
+| MVP-DOM-03 | Entity Relationship + RelationshipRepository интерфейс | Domain | S | MVP-INFRA-01 | REL-02, REL-06 | Dataclass Relationship, RelationshipType enum, ABC-репозиторий (пример в mvp-guide; перенос на фазу **C**) |
 
 ### 1.3 Application-слой (DTO, Use Cases)
 
 | ID | Название | Слой | Сложность | Зависимости | Требования | Критерии приёмки |
 |----|----------|------|-----------|-------------|------------|-------------------|
-| MVP-APP-01 | DTO: CreateUserDTO, UpdateUserDTO, AdminUpdateUserDTO, ResponseUserDTO | Бизнес-логика | S | MVP-DOM-01 | AUTH-01, USER-02 | ✅ Уже реализовано |
-| MVP-APP-02 | DTO: CreatePersonDTO, UpdatePersonDTO, PersonResponseDTO | Бизнес-логика | S | MVP-DOM-02 | PERS-01, PERS-03, PERS-06 | ✅ Уже реализовано |
+| MVP-APP-01 | DTO: CreateUserDTO, UpdateUserDTO, AdminUpdateUserDTO, ResponseUserDTO | Бизнес-логика | S | MVP-DOM-01 | AUTH-01, USER-02 | Реализуется в `core/` на фазе **C** (шаблон в mvp-guide) |
+| MVP-APP-02 | DTO: CreatePersonDTO, UpdatePersonDTO, PersonResponseDTO | Бизнес-логика | S | MVP-DOM-02 | PERS-01, PERS-03, PERS-06 | Реализуется в `core/` на фазе **C** (шаблон в mvp-guide) |
 | MVP-APP-03 | DTO: CreateRelationshipDTO, RelationshipResponseDTO | Бизнес-логика | M | MVP-DOM-03 | REL-01, REL-02 | RelationshipType enum в DTO, валидация person_1 ≠ person_2 |
 | MVP-APP-04 | DTO: AuthDTO (LoginDTO, TokenResponseDTO, ForgotPasswordDTO, ResetPasswordDTO) | Бизнес-логика | M | MVP-DOM-01 | AUTH-02, AUTH-04, AUTH-06 | Все модели для auth-эндпоинтов |
-| MVP-APP-05 | Use Case: CreateUserUseCase | Бизнес-логика | S | MVP-DOM-01, MVP-APP-01 | AUTH-01, AUTH-05 | ⚠️ Реализовано, но нарушает Dependency Rule (BUG-04) |
+| MVP-APP-05 | Use Case: CreateUserUseCase | Бизнес-логика | S | MVP-DOM-01, MVP-APP-01 | AUTH-01, AUTH-05 | При переносе из шаблона сразу заложить **MVP-APP-05-fix** (BUG-04: только `IPasswordService`) |
 | MVP-APP-05-fix | Исправление CreateUserUseCase: внедрить IPasswordService вместо прямого импорта | Бизнес-логика | S | MVP-APP-06 (интерфейсы) | AUTH-05 | Создан `IPasswordService`, `CreateUserUseCase` зависит от интерфейса, не от infrastructure |
 | MVP-APP-06 | Use Case: LoginUseCase | Бизнес-логика | M | MVP-DOM-01, MVP-INFRA-08 | AUTH-02, AUTH-05, AUTH-06 | Проверка пароля через bcrypt, генерация JWT-пары |
 | MVP-APP-07 | Use Case: UpdateUserUseCase | Бизнес-логика | M | MVP-DOM-01, MVP-APP-01 | USER-02, USER-04 | Проверка уникальности email, username не меняется |
 | MVP-APP-08 | Use Case: ChangePasswordUseCase | Бизнес-логика | M | MVP-DOM-01 | USER-03 | Проверка текущего пароля через verify_password, хеширование нового |
 | MVP-APP-09 | Use Case: ForgotPasswordUseCase + ResetPasswordUseCase | Бизнес-логика | L | MVP-DOM-01, MVP-INFRA-09 | AUTH-04 | Генерация токена сброса с TTL, отправка email, сброс по токену |
-| MVP-APP-10 | Use Case: CreatePersonUseCase | Бизнес-логика | S | MVP-DOM-02, MVP-APP-02 | PERS-01, PERS-07 | ✅ Уже реализовано |
+| MVP-APP-10 | Use Case: CreatePersonUseCase | Бизнес-логика | S | MVP-DOM-02, MVP-APP-02 | PERS-01, PERS-07 | Реализуется в `core/` на фазе **C** (шаблон в mvp-guide) |
 | MVP-APP-11 | Use Case: GetPersonUseCase + GetAllPersonsUseCase | Бизнес-логика | M | MVP-DOM-02 | PERS-02, PERS-05 | Проверка владения через owner_id, пагинация skip/limit |
-| MVP-APP-12 | Use Case: UpdatePersonUseCase | Бизнес-логика | M | MVP-DOM-02, MVP-APP-02 | PERS-03 | ✅ Уже реализовано |
+| MVP-APP-12 | Use Case: UpdatePersonUseCase | Бизнес-логика | M | MVP-DOM-02, MVP-APP-02 | PERS-03 | Реализуется в `core/` на фазе **C** (шаблон в mvp-guide) |
 | MVP-APP-13 | Use Case: DeletePersonUseCase | Бизнес-логика | L | MVP-DOM-02, MVP-DOM-03 | PERS-04 | Удаление персоны + каскадное удаление всех её связей в транзакции |
 | MVP-APP-14 | Use Case: CreateRelationshipUseCase | Бизнес-логика | L | MVP-DOM-03, MVP-DOM-02 | REL-01, REL-06, REL-07 | Проверка владения обеими персонами, проверка дубликатов, валидация |
 | MVP-APP-15 | Use Case: GetRelationshipsUseCase + GetRelationshipsByTypeUseCase | Бизнес-логика | M | MVP-DOM-03 | REL-04, REL-05 | Фильтрация по person_id и type |
@@ -190,8 +207,8 @@
 
 | ID | Название | Слой | Сложность | Зависимости | Требования | Критерии приёмки |
 |----|----------|------|-----------|-------------|------------|-------------------|
-| MVP-TEST-01 | Фикстуры и conftest.py | Тестирование | S | MVP-INFRA-01 | — | ✅ Уже реализовано |
-| MVP-TEST-02 | Unit-тесты: Auth use cases (CreateUser, Login, ChangePassword) | Тестирование | M | MVP-APP-05, MVP-APP-06, MVP-APP-08 | — | ✅ Частично реализовано, доработать Login |
+| MVP-TEST-01 | Фикстуры и conftest.py | Тестирование | S | MVP-INFRA-01 | — | Добавить при появлении `tests/` и `core/` (фаза **C**) |
+| MVP-TEST-02 | Unit-тесты: Auth use cases (CreateUser, Login, ChangePassword) | Тестирование | M | MVP-APP-05, MVP-APP-06, MVP-APP-08 | — | После реализации auth в `core/` (фаза **C/D**) |
 | MVP-TEST-03 | Unit-тесты: Person use cases (CRUD) | Тестирование | M | MVP-APP-10–13 | — | >80% покрытие person use cases |
 | MVP-TEST-04 | Unit-тесты: Relationship use cases | Тестирование | M | MVP-APP-14–16 | — | >80% покрытие relationship use cases |
 | MVP-TEST-05 | Unit-тесты: DTO валидация (все DTO) | Тестирование | M | MVP-APP-01–04 | — | Невалидные данные → ValidationError |
@@ -203,7 +220,19 @@
 
 ## 2. Приоритеты MVP
 
-### Must have (обязательно для запуска)
+### По фазам (согласовано с §0.1)
+
+| Фаза | Минимальный результат | Задачи MVP-* (ориентир) |
+|------|----------------------|-------------------------|
+| **A** | Рабочий Tkinter + SQLite в корне | Нет обязательных ID; поддержка `main.py` / `gui.py` / `models.py` |
+| **B** | Читаемый монолит + первые тесты | Параллельно MVP-LEARN-02, 05, 06; при желании Alembic из MVP-INFRA-03 |
+| **C** | `core/` + Desktop на use cases | MVP-INFRA-01–07, MVP-DOM-01–03, MVP-APP-* для персон/связей (auth можно подключать последним блоком в C) |
+| **D** | FastAPI поверх тех же use cases | MVP-INFRA-08, MVP-API-01–08, MVP-TEST-02–04, 06–08 |
+| **E** | Дерево Web и/или Canvas | MVP-WEB-01–04, MVP-DESK-08–11 |
+
+Ниже — **приоритеты «полного» multi-client MVP** (если идёте до конца по плану без сужения скоупа).
+
+### Must have (полный multi-client MVP)
 | ID задач | Количество |
 |----------|-----------|
 | MVP-INFRA-01–07, MVP-DOM-01–03, MVP-APP-01–03, MVP-APP-05-fix, MVP-APP-05–06, MVP-APP-10–17, MVP-INFRA-08, MVP-API-01–03, MVP-API-06–08, MVP-TEST-02–04, MVP-TEST-06 | **31** |
@@ -220,7 +249,9 @@
 
 ---
 
-## 3. Итерации внутри MVP
+## 3. Календарь итераций (полный объём плана)
+
+Этот раздел — **примерный пошаговый календарь на ~16 недель**, если цель — сразу web + API + desktop с auth. При обучении через **фазы A→B→C** первые недели лучше потратить на **рабочий монолит** (§0.1), а строки ниже использовать как **справочник блоков**, а не жёсткие даты.
 
 ### Итерация 0: Изучение (10 дней, параллельно с практикой)
 
@@ -396,7 +427,7 @@
 | **SQLite → PostgreSQL миграция** | MVP-INFRA-07 | Средняя | Среднее | SQLAlchemy абстракция + Alembic. Протестировать миграции на обеих БД до деплоя |
 | **Tkinter Canvas: утечки памяти при перерисовке** | MVP-DESK-08 | Средняя | Среднее | Очищать Canvas перед перерисовкой (`delete('all')`), не накапливать объекты |
 | **Неопытность: неправильная архитектура связей между слоями** | Все | Средняя | Высокое | Строгий запрет: domain НЕ импортирует infrastructure. Ревью на каждой итерации |
-| **Существующий код нарушает Dependency Rule** | BUG-04 (CreateUserUseCase), все UseCase'ы | Высокая | Высокое | Создать `IPasswordService`/`ITokenService` в `core/application/interfaces/`, адаптеры в `core/infrastructure/auth/`. Исправить все UseCase'ы до начала новых задач |
+| **Шаблон use case при переносе в `core/`** | BUG-04, прямые импорты из infrastructure | Высокая | Высокое | Сразу вводить `IPasswordService`/`ITokenService` в `core/application/interfaces/`, адаптеры в `core/infrastructure/auth/` (см. MVP-APP-05-fix) |
 | **Неопытность: непонимание SQLAlchemy session lifecycle** | MVP-INFRA-04–06 | Высокая | Высокое | Использовать контекстный менеджер для сессий. Написать integration-тесты с реальной БД |
 | **Циклические связи в графе (A→B→C→A)** | MVP-APP-17 | Низкая | Высокое | BFS с visited-множеством. Обязательный тест на циклических данных |
 
@@ -449,15 +480,19 @@
 | **Баг-фиксы в существующем коде** | 8 (BUG-01–08) |
 | **Общая трудоёмкость** | ~100 человеко-дней |
 | **С буфером 30% (неопытный разработчик)** | ~20 недель (5 месяцев) |
-| **Количество итераций** | 9 (0–8) |
-| **Критический путь** | Итерация 0 → 1 → 2 → 3 → 4/5 → 6 → 8 |
-| **Наибольшие риски** | Desktop-визуализация на Canvas (MVP-DESK-08) — XL сложность; SQLAlchemy session lifecycle для неопытного разработчика |
-| **Что уже сделано** | Entities, DTO, password service, фикстуры, часть тестов — экономит ~5 дней |
-| **Что требует исправления** | 8 багов (BUG-01–08), исправляются в итерации 1 |
+| **Количество итераций (полный календарь)** | 9 (раздел §3) |
+| **Критический путь (обучение)** | **Фаза A → B → C** (рабочий GUI → монолит → `core/` + Tkinter) |
+| **Критический путь (полный multi-client)** | Итерация 0 → 1 → 2 → 3 → 4/5 → 6 → 8 |
+| **Наибольшие риски** | Desktop Canvas (MVP-DESK-08); session lifecycle SQLAlchemy |
+| **Что уже есть в репозитории (фаза A)** | `main.py`, `gui.py`, `models.py`, `database.py`, SQLite в `data/` — рабочий прототип без `core/` |
+| **Что появится на фазах C–E** | Каталог `core/`, FastAPI `api/`, разнесённый desktop, тесты по таблицам §1 |
+| **Чеклист до переноса в `core/`** | BUG-01–07 по §0.4; в legacy — согласованность имён ORM (например `person_id_related`) |
 
 ---
 
 ## 7. Маппинг задач → файлы
+
+Пути ниже соответствуют **целевой** структуре после фаз **C–D**. Пока код в корне (`gui.py`, `models.py`), используйте таблицу как **чеклист появляющихся файлов**, а не как описание текущего дерева.
 
 ### Инфраструктура
 

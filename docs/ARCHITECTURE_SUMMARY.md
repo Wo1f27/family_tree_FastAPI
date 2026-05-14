@@ -1,103 +1,67 @@
-# Резюме: Архитектура проекта Family Tree
+# Резюме: архитектура Family Tree
 
-## 🎯 Концепция
+## Сейчас и цель
 
-**Общее ядро (core)** с бизнес-логикой, которое используется:
-- 🌐 **Web API** (FastAPI) - уже есть
-- 💻 **Desktop** приложение - нужно создать
-- 📱 **Mobile** приложение - в будущем
+| | |
+|--|--|
+| **Сейчас (репозиторий)** | Один процесс: **Python 3.13+**, **SQLAlchemy 2.0+**, **SQLite**, **Tkinter** — файлы в корне: `main.py` → `gui.py`, плюс `models.py`, `database.py`, данные в `data/genealogy.db`. Это **фаза A** в [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) (рабочий baseline для обучения). |
+| **Цель** | Тот же продукт постепенно вырастает до **Clean Architecture**: общее ядро `core/` (domain → application → infrastructure), поверх него **несколько клиентов** — по желанию **FastAPI** и/или улучшенный Desktop. |
 
-## 📁 Структура проекта
+## Концепция целевой системы
+
+**Общее ядро (`core/`)** с бизнес-логикой, которое могут использовать:
+
+- **Desktop (Tkinter)** — основной клиент для обучения в этом проекте; идёт в комплекте с Python, отдельной версии «пакета Tkinter» нет.
+- **Web API (FastAPI)** — второй клиент, когда дойдёте до фазы **D** (см. [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) §0.1).
+- **Mobile** — опционально в долгую перспективу.
+
+## Структура проекта (целевая)
 
 ```
 family_tree/
-├── core/              # 🎯 ОБЩЕЕ ЯДРО - бизнес-логика
-│   ├── domain/       # Сущности, интерфейсы репозиториев
-│   ├── application/  # Use Cases, DTO
-│   └── infrastructure/ # Реализация (БД, аутентификация)
-│
-├── api/              # 🌐 FastAPI веб-приложение
-│   └── routes/       # API эндпоинты (используют Use Cases)
-│
-├── desktop/          # 💻 Desktop приложение
-│   └── controllers/  # Контроллеры (используют те же Use Cases)
-│
-└── shared/           # 🔄 Общие утилиты
+├── core/                    # ядро: domain, application, infrastructure
+├── api/                     # FastAPI (появится на фазе D)
+├── desktop/                 # или ui/: Tkinter-views, тонкий слой (фазы B–C)
+├── shared/                  # общие утилиты (по необходимости)
+└── tests/
 ```
 
-## ✨ Преимущества
+Текущий **плоский** вариант (`gui.py` рядом с `models.py`) — нормальная стартовая точка; разнесение по папкам описано в [mvp-guide/](mvp-guide/README.md).
 
-✅ **Одна бизнес-логика** - не дублируется код  
-✅ **Легко тестировать** - можно мокировать репозитории  
-✅ **Масштабируемо** - легко добавить Mobile клиент  
-✅ **Гибко** - можно менять UI/БД без изменения логики  
+## Преимущества целевой схемы
 
-## 🔄 Как это работает
+- Одна бизнес-логика (use cases), несколько интерфейсов (REST, Tkinter).
+- Юнит-тесты с подменой репозиториев.
+- Проще менять БД или UI, не ломая правила зависимостей.
 
-### Пример: Создание персоны
+## Поток данных (когда появится `core/`)
 
-**1. Use Case (core)** - бизнес-логика:
-```python
-class CreatePersonUseCase:
-    def execute(self, dto: CreatePersonDTO) -> Person:
-        # Валидация, бизнес-правила
-        person = Person(...)
-        return self._repo.create(person)
+```
+Запрос (HTTP или событие GUI) → адаптер → Use Case → Domain / Repository (интерфейс) → реализация SQLAlchemy → БД
 ```
 
-**2. API Route** - использует Use Case:
-```python
-@router.post("/persons")
-def create_person(dto: CreatePersonDTO):
-    use_case = CreatePersonUseCase(repo)
-    return use_case.execute(dto)
-```
+## Технологии (зафиксированный стек обучения)
 
-**3. Desktop Controller** - использует тот же Use Case:
-```python
-def create_person(self, form_data):
-    use_case = CreatePersonUseCase(repo)
-    return use_case.execute(dto)
-```
+| Слой | Стек |
+|------|------|
+| Язык | **Python 3.13+** |
+| ORM | **SQLAlchemy 2.0+** |
+| Desktop | **Tkinter** |
+| API (позже) | FastAPI, Pydantic, JWT — по mvp-guide |
+| БД | SQLite на этапах A–C; PostgreSQL при деплое — по [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) |
 
-**Одна логика → три интерфейса!**
+## Порядок развития (кратко)
 
-## 🛠 Технологии
+1. Сохранять **запускаемое** приложение как сейчас (фаза **A**).
+2. Упорядочить монолит: модули, «репозитории без церемоний», pytest на логику (**B**).
+3. Ввести `core/` и перенести use cases; Tkinter только вызывает их (**C**).
+4. Добавить FastAPI (**D**), визуализацию дерева (**E**).
 
-### Core
-- Python 3.12+
-- SQLAlchemy (ORM)
-- Pydantic (валидация)
+Подробнее: [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) §0.1–0.6, [ARCHITECTURE.md](ARCHITECTURE.md), [mvp-guide/README.md](mvp-guide/README.md).
 
-### API
-- FastAPI
-- JWT аутентификация
+## Документы
 
-### Desktop (варианты)
-- **PyQt6/PySide6** - нативный Python GUI (рекомендую)
-- **Tkinter** - простой, встроенный
-- **Electron** - веб-технологии
-
-## 📋 План действий
-
-1. **Создать структуру** директорий
-2. **Мигрировать** текущий код в core
-3. **Создать Use Cases** для бизнес-логики
-4. **Обновить API** для использования Use Cases
-5. **Создать Desktop** приложение
-
-Подробности в файлах:
-- `ARCHITECTURE.md` - детальная архитектура
-- `PROJECT_STRUCTURE.md` - структура файлов
-- `EXAMPLES.md` - примеры кода
-- `MIGRATION_PLAN.md` - план миграции
-
-## ❓ Вопросы для решения
-
-1. **Desktop фреймворк?** PyQt6, Tkinter или Electron?
-2. **Синхронизация?** Локальная БД или API для Desktop?
-3. **Приоритеты?** Сначала Web, Desktop или параллельно?
-
----
-
-**Готов начать миграцию?** Начнем с создания структуры и миграции одного модуля (User) как пример!
+- `ARCHITECTURE.md` — слои и модули подробно.
+- `PROJECT_STRUCTURE.md` — расширенный чертёж каталогов.
+- `MVP_TASK_PLAN.md` — фазы, задачи MVP-*, календарь.
+- `mvp-guide/` — пошаговые инструкции с примерами кода.

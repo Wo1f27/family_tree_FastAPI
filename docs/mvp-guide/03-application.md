@@ -4,13 +4,13 @@
 
 ### MVP-APP-01 — DTO: CreateUserDTO, UpdateUserDTO, AdminUpdateUserDTO, ResponseUserDTO
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/dto/user_dto.py` содержит все четыре DTO.
+**Шаблон:** `core/application/dto/user_dto.py` — по мере внедрения auth (фаза D). Пока в корневом проекте может отсутствовать.
 
 ---
 
 ### MVP-APP-02 — DTO: CreatePersonDTO, UpdatePersonDTO, PersonResponseDTO
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/dto/person_dto.py` содержит все три DTO.
+**Шаблон:** `core/application/dto/person_dto.py`. Поля дат — **`date_of_birth`**, **`date_of_death`**; при необходимости `owner_id` для веба. См. **[00-schema-and-mapping.md](00-schema-and-mapping.md)**.
 
 ---
 
@@ -20,35 +20,30 @@
 
 ```python path=core/application/dto/relationship_dto.py
 from pydantic import BaseModel, Field, model_validator
-from datetime import datetime
-from core.domain.entities import RelationshipType
 
 
 class CreateRelationshipDTO(BaseModel):
-    person_1: int = Field(..., description="ID первой персоны")
-    person_2: int = Field(..., description="ID второй персоны")
-    relationship_type: RelationshipType = Field(..., description="Тип связи")
-    start_date: datetime | None = None
-    end_date: datetime | None = None
+    """Направленное ребро: у person_id второй человек person_id_related с ролью relationship_type."""
+
+    person_id: int = Field(..., description="Субъект связи (как в БД)")
+    person_id_related: int = Field(..., description="Второй человек")
+    relationship_type: str = Field(..., description="father|mother|child|spouse|sibling")
 
     @model_validator(mode="after")
     def validate_persons(self):
-        if self.person_1 == self.person_2:
+        if self.person_id == self.person_id_related:
             raise ValueError("Персона не может быть связана сама с собой")
         return self
 
 
 class RelationshipResponseDTO(BaseModel):
     id: int
-    person_1: int
-    person_2: int
-    relationship_type: RelationshipType
-    start_date: datetime | None
-    end_date: datetime | None
-    created_at: datetime
+    person_id: int
+    person_id_related: int
+    relationship_type: str
 ```
 
-> **⚠️ Важно:** `start_date` и `end_date` — `datetime`, не `date`. Должно совпадать с доменной сущностью `Relationship`.
+> Семантика строк `relationship_type` и обратные связи — как в текущем `gui.py` и в **[00-schema-and-mapping.md](00-schema-and-mapping.md)**.
 
 ---
 
@@ -88,7 +83,7 @@ class ResetPasswordDTO(BaseModel):
 
 ### MVP-APP-05 — Use Case: CreateUserUseCase
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/use_cases/user/create_user.py`.
+**Шаблон:** `core/application/use_cases/user/create_user.py` — при внедрении auth; в корневом репозитории может отсутствовать.
 
 ---
 
@@ -209,7 +204,7 @@ class LoginUseCase:
 
 ### MVP-APP-07 — Use Case: UpdateUserUseCase
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/use_cases/user/update_user.py`. Проверяет уникальность email, username не меняется.
+**Шаблон:** `core/application/use_cases/user/update_user.py`.
 
 ---
 
@@ -298,7 +293,7 @@ class ResetPasswordUseCase:
 
 ### MVP-APP-10 — Use Case: CreatePersonUseCase
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/use_cases/person/create_person.py`.
+**Шаблон:** `core/application/use_cases/person/create_person.py` (поля дат — `date_of_birth` / `date_of_death`, см. **00-schema**).
 
 ---
 
@@ -327,7 +322,7 @@ class GetAllPersonsUseCase:
 
 ### MVP-APP-12 — Use Case: UpdatePersonUseCase
 
-**Статус: ✅ Уже реализовано.** Файл `core/application/use_cases/person/update_person.py`.
+**Шаблон:** `core/application/use_cases/person/update_person.py`.
 
 ---
 
@@ -371,7 +366,7 @@ class DeletePersonUseCase:
 **Что нужно сделать:**
 
 ```python path=core/application/use_cases/relationship/create_relationship.py
-from core.domain.entities import Relationship, RelationshipType
+from core.domain.entities import Relationship
 from core.domain.repositories import PersonRepository, RelationshipRepository
 from core.application.dto.relationship_dto import CreateRelationshipDTO
 
@@ -382,46 +377,42 @@ class CreateRelationshipUseCase:
         self._rel_repo = rel_repo
 
     def execute(self, dto: CreateRelationshipDTO, user_id: int) -> Relationship:
-        # Проверка владения обеими персонами
-        p1 = self._person_repo.get_by_id_and_owner_id(dto.person_1, user_id)
-        if not p1:
-            raise ValueError("Персона 1 не найдена или не принадлежит вам")
-        p2 = self._person_repo.get_by_id_and_owner_id(dto.person_2, user_id)
-        if not p2:
-            raise ValueError("Персона 2 не найдена или не принадлежит вам")
+        subj = self._person_repo.get_by_id_and_owner_id(dto.person_id, user_id)
+        if not subj:
+            raise ValueError("Субъект связи не найден или не принадлежит вам")
+        other = self._person_repo.get_by_id_and_owner_id(dto.person_id_related, user_id)
+        if not other:
+            raise ValueError("Второй человек не найден или не принадлежит вам")
 
-        # Проверка дубликата (оба направления)
-        existing = self._rel_repo.get_by_person_id(dto.person_1)
+        # Проверка дубликата (прямой + эквиваленты father/mother ↔ child) — см. gui._has_equivalent_relationship
+        existing = self._rel_repo.get_by_person_id(dto.person_id) + self._rel_repo.get_by_person_id(
+            dto.person_id_related
+        )
         for rel in existing:
-            # Прямой дубликат: A→B parent
-            if (rel.person_1 == dto.person_1 and rel.person_2 == dto.person_2
-                    and rel.relationship_type == dto.relationship_type):
+            if (
+                rel.person_id == dto.person_id
+                and rel.person_id_related == dto.person_id_related
+                and rel.relationship_type == dto.relationship_type
+            ):
                 raise ValueError("Такая связь уже существует")
-            # Обратный дубликат: B→A child (parent и child — одна и та же связь)
-            if (rel.person_1 == dto.person_2 and rel.person_2 == dto.person_1
-                    and rel.relationship_type == dto.relationship_type.get_reverse_type()
-                    and dto.relationship_type in (RelationshipType.PARENT, RelationshipType.CHILD)):
-                raise ValueError("Такая связь уже существует (в обратном направлении)")
 
         relationship = Relationship(
             id=None,
-            person_1=dto.person_1,
-            person_2=dto.person_2,
+            person_id=dto.person_id,
+            person_id_related=dto.person_id_related,
             relationship_type=dto.relationship_type,
-            start_date=dto.start_date,
-            end_date=dto.end_date,
         )
         return self._rel_repo.create(relationship)
 ```
 
-> **⚠️ Исправлено:** Проверка дубликатов теперь ловит обратные связи (A→B parent + B→A child — логический дубликат).
+> Дополните проверкой эквивалентных рёбер (`father`/`mother` vs `child`) по правилам из `gui.py`.
 
 ---
 
 ### MVP-APP-15 — Use Case: GetRelationshipsUseCase + GetRelationshipsByTypeUseCase
 
 ```python path=core/application/use_cases/relationship/get_relationships.py
-from core.domain.entities import Relationship, RelationshipType
+from core.domain.entities import Relationship
 from core.domain.repositories import RelationshipRepository
 
 
@@ -437,7 +428,7 @@ class GetRelationshipsByTypeUseCase:
     def __init__(self, rel_repo: RelationshipRepository):
         self._rel_repo = rel_repo
 
-    def execute(self, person_id: int, rel_type: RelationshipType) -> list[Relationship]:
+    def execute(self, person_id: int, rel_type: str) -> list[Relationship]:
         return self._rel_repo.get_by_type(person_id, rel_type)
 ```
 
@@ -459,10 +450,10 @@ class DeleteRelationshipUseCase:
         if not rel:
             raise ValueError("Связь не найдена")
 
-        # Проверка владения хотя бы одной персоной в связи
-        p1 = self._person_repo.get_by_id_and_owner_id(rel.person_1, user_id)
-        p2 = self._person_repo.get_by_id_and_owner_id(rel.person_2, user_id)
-        if not p1 and not p2:
+        # Проверка владения: хотя бы один конец ребра — «наш»
+        a = self._person_repo.get_by_id_and_owner_id(rel.person_id, user_id)
+        b = self._person_repo.get_by_id_and_owner_id(rel.person_id_related, user_id)
+        if not a and not b:
             raise ValueError("Связь не принадлежит вам")
 
         return self._rel_repo.delete(relationship_id)
@@ -476,8 +467,14 @@ class DeleteRelationshipUseCase:
 
 ```python path=core/application/use_cases/tree/get_tree_data.py
 from collections import deque
-from core.domain.entities import Person, Relationship, RelationshipType
+from core.domain.entities import Person, Relationship
 from core.domain.repositories import PersonRepository, RelationshipRepository
+
+
+def _edge_key(r: Relationship) -> tuple[int, int, str]:
+    """Уникальный ключ ребра для дедупликации при обходе списков per-person."""
+    a, b = sorted((r.person_id, r.person_id_related))
+    return (a, b, r.relationship_type)
 
 
 class GetTreeDataUseCase:
@@ -486,41 +483,37 @@ class GetTreeDataUseCase:
         self._rel_repo = rel_repo
 
     def execute(self, user_id: int) -> dict:
-        """Возвращает {nodes, edges, generations} для визуализации"""
-        persons = self._person_repo.get_all(owner_id=user_id)  # нужен owner_id фильтр
+        """{nodes, edges, generations} — для vis.js / Canvas."""
+        persons = self._person_repo.get_all(owner_id=user_id)
         if not persons:
             return {"nodes": [], "edges": [], "generations": []}
 
-        # Собрать все связи
-        all_relationships = []
+        all_relationships: list[Relationship] = []
         for p in persons:
-            rels = self._rel_repo.get_by_person_id(p.id)
-            all_relationships.extend(rels)
+            all_relationships.extend(self._rel_repo.get_by_person_id(p.id))
 
-        # Уникализировать связи (т.к. get_by_person_id может вернуть дубли)
-        seen = set()
-        unique_rels = []
+        seen: set[tuple[int, int, str]] = set()
+        unique_rels: list[Relationship] = []
         for r in all_relationships:
-            key = (min(r.person_1, r.person_2), max(r.person_1, r.person_2), r.relationship_type)
-            if key not in seen:
-                seen.add(key)
+            k = _edge_key(r)
+            if k not in seen:
+                seen.add(k)
                 unique_rels.append(r)
 
-        # Найти корни (персоны без родителей)
+        # «Есть родитель»: father/mother у ребёнка в person_id; или child у родителя в person_id
         person_ids = {p.id for p in persons}
-        has_parent = set()
+        has_parent: set[int] = set()
         for r in unique_rels:
-            if r.relationship_type == RelationshipType.PARENT:
-                # person_1 — родитель, person_2 — ребёнок
-                has_parent.add(r.person_2)
+            if r.relationship_type in ("father", "mother"):
+                has_parent.add(r.person_id)
+            elif r.relationship_type == "child":
+                has_parent.add(r.person_id_related)
 
         roots = [p.id for p in persons if p.id not in has_parent]
 
-        # BFS для назначения поколений
-        generations = {}  # person_id → generation
-        visited = set()
-        queue = deque()
-
+        generations: dict[int, int] = {}
+        visited: set[int] = set()
+        queue: deque[int] = deque()
         for root_id in roots:
             generations[root_id] = 0
             queue.append(root_id)
@@ -532,28 +525,38 @@ class GetTreeDataUseCase:
             visited.add(current)
 
             for r in unique_rels:
-                if r.relationship_type == RelationshipType.PARENT:
-                    if r.person_1 == current and r.person_2 not in visited:
-                        generations[r.person_2] = generations.get(current, 0) + 1
-                        queue.append(r.person_2)
-                    elif r.person_2 == current and r.person_1 not in visited:
-                        generations[r.person_1] = generations.get(current, 0) + 1
-                        queue.append(r.person_1)
+                if r.relationship_type in ("father", "mother"):
+                    child, parent = r.person_id, r.person_id_related
+                    if parent == current and child not in visited:
+                        generations[child] = generations.get(current, 0) + 1
+                        queue.append(child)
+                    elif child == current and parent not in visited:
+                        generations[parent] = generations.get(current, 0) + 1
+                        queue.append(parent)
+                elif r.relationship_type == "child":
+                    parent, child = r.person_id, r.person_id_related
+                    if parent == current and child not in visited:
+                        generations[child] = generations.get(current, 0) + 1
+                        queue.append(child)
+                    elif child == current and parent not in visited:
+                        generations[parent] = generations.get(current, 0) + 1
+                        queue.append(parent)
 
-        # Персоны без поколения — назначить 0
         for p in persons:
             if p.id not in generations:
                 generations[p.id] = 0
 
-        # Формирование результата
+        def label(p: Person) -> str:
+            return f"{p.last_name} {p.first_name}".strip()
+
         nodes = [
             {
                 "id": p.id,
-                "label": p.full_name,
+                "label": label(p),
                 "gender": p.gender.value if p.gender else None,
-                "is_alive": p.is_alive,
-                "date_birth": str(p.date_birth) if p.date_birth else None,
-                "date_death": str(p.date_death) if p.date_death else None,
+                "is_alive": p.date_of_death is None,
+                "date_of_birth": str(p.date_of_birth) if p.date_of_birth else None,
+                "date_of_death": str(p.date_of_death) if p.date_of_death else None,
                 "generation": generations.get(p.id, 0),
             }
             for p in persons
@@ -561,9 +564,9 @@ class GetTreeDataUseCase:
 
         edges = [
             {
-                "from": r.person_1,
-                "to": r.person_2,
-                "type": r.relationship_type.value,
+                "from": r.person_id,
+                "to": r.person_id_related,
+                "type": r.relationship_type,
             }
             for r in unique_rels
         ]

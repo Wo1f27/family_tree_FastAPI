@@ -86,8 +86,8 @@ async function loadTree() {
 
 function showPersonModal(person) {
     document.getElementById('modal-name').textContent = `${person.last_name} ${person.first_name} ${person.middle_name || ''}`;
-    document.getElementById('modal-birth').textContent = person.date_birth ? `Рождение: ${person.date_birth}` : '';
-    document.getElementById('modal-death').textContent = person.date_death ? `Смерть: ${person.date_death}` : '';
+    document.getElementById('modal-birth').textContent = person.date_of_birth ? `Рождение: ${person.date_of_birth}` : '';
+    document.getElementById('modal-death').textContent = person.date_of_death ? `Смерть: ${person.date_of_death}` : '';
     document.getElementById('modal-gender').textContent = `Пол: ${person.gender || 'не указан'}`;
     document.getElementById('modal-bio').textContent = person.biography || '';
     document.getElementById('person-modal').style.display = 'block';

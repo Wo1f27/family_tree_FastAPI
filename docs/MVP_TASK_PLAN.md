@@ -22,6 +22,21 @@
 
 ---
 
+## 0.11 Архитектура: принципы и что улучшено в плане
+
+| Принцип | Зачем |
+|--------|--------|
+| **Вертикальный срез** | Вводить `core/` не слоем «весь domain», а цепочкой **один use case → один сценарий UI/API**, чтобы сразу проверять границы. |
+| **SSOT схемы** | Поля БД и смысл связей — только в [mvp-guide/00-schema-and-mapping.md](mvp-guide/00-schema-and-mapping.md); остальные доки согласованы с ним. |
+| **Реестр решений** | Нестандартные компромиссы (фазы, `owner_id`, транзакции, упаковка) — в [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md), чтобы не спорить с прошлым собой. |
+| **`owner_id` до auth** | До JWT колонка может быть `NULL`; репозитории всё равно принимают `owner_id`/`user_id` в API, чтобы не ломать контракт при включении веба (см. ADR-004). |
+| **Транзакции** | При нескольких операциях в одном сценарии — одна сессия и явная граница commit (см. ADR-006); не полагаться на «commit в каждом репозитории» для составных операций. |
+| **Не смешивать async ORM в MVP** | Синхронные репозитории до стабильного API + нагрузочных измерений (ADR-005). |
+
+**Нецели на фазе C (осознанно откладываем):** микросервисы, GraphQL, async SQLAlchemy, онлайн-обновление клиента, полная i18n.
+
+---
+
 ## 0.2 Текущее состояние репозитория (факт)
 
 Ниже — что **реально лежит в корне проекта** на момент актуализации документации. Целевая структура `core/`, `api/`, `desktop/` из [ARCHITECTURE.md](ARCHITECTURE.md) — это **следующие фазы**, а не текущий обязательный layout.
@@ -36,7 +51,7 @@
 | Каталог `core/` | — | **Отсутствует** в репозитории; описан в документах и mvp-guide как цель фазы C |
 | FastAPI-приложение | — | **Отсутствует** в репозитории; цель фазы D |
 
-Документы `docs/mvp-guide/*.md` содержат примеры путей вида `core/...` и `desktop/...` — их нужно **создавать при миграции** или адаптировать пути под свою структуру на фазе B.
+Документы `docs/mvp-guide/*.md` содержат примеры путей вида `core/...` и `desktop/...` — их нужно **создавать при миграции** или адаптировать пути под свою структуру на фазе B. **Схема полей БД** — [mvp-guide/00-schema-and-mapping.md](mvp-guide/00-schema-and-mapping.md); **зафиксированные архитектурные компромиссы** — [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md).
 
 ---
 
@@ -47,7 +62,7 @@
 | **Dependency Rule** | Domain НЕ импортирует infrastructure. Application НЕ импортирует infrastructure напрямую — только через интерфейсы (`core/application/interfaces/`) | `grep -r "from core.infrastructure" core/domain/ core/application/` — 0 результатов (кроме DTO, которые могут ссылаться на domain enums) |
 | **Единый Base** | `DeclarativeBase` объявлен **только** в `core/infrastructure/database/models/base.py`. Нигде больше не создаётся `declarative_base()` | Удалить `Base = declarative_base()` из `core/infrastructure/database/config.py` |
 | **Синхронные репозитории для MVP** | Все репозитории — синхронные (`def`, не `async def`). FastAPI работает с sync через пул потоков. Async-репозитории — преждевременная оптимизация | Все методы `*Repository` — `def`, не `async def` |
-| **owner_id фильтрация** | Все запросы к Person/Relationship фильтруются по `owner_id` текущего пользователя. `get_all()` принимает `owner_id` | Нет метода `get_all()` без `owner_id` для персон |
+| **owner_id фильтрация** | После включения multi-user все запросы к Person/Relationship фильтруются по `owner_id` текущего пользователя (JWT). `get_all()` / аналоги принимают `owner_id`. **До auth:** допустимы записи с `owner_id IS NULL` (десктоп); репозитории всё равно принимают параметр `owner_id` для единообразия с API | Нет публичного `get_all()` без параметра владельца после MVP-auth; в переходный период документировать правило для `NULL` |
 | **UTC для дат** | `datetime.now(UTC)`, не `datetime.utcnow()` (удалён в Python 3.12+) | `grep -r "utcnow" core/` — 0 результатов |
 | **Интерфейсы в application/** | `IPasswordService`, `ITokenService` находятся в `core/application/interfaces/`, адаптеры — в `core/infrastructure/auth/` | UseCase'ы зависят только от интерфейсов, не от конкретных реализаций |
 | **Session lifecycle** | Сессия БД создаётся через `get_sync_session()` (generator), закрытие в `finally`. Репозитории НЕ управляют сессией | Нет `SyncSessionLocal()` вне `config.py`, сессия передаётся через DI |
@@ -487,6 +502,7 @@
 | **Что уже есть в репозитории (фаза A)** | `main.py`, `gui.py`, `models.py`, `database.py`, SQLite в `data/` — рабочий прототип без `core/` |
 | **Что появится на фазах C–E** | Каталог `core/`, FastAPI `api/`, разнесённый desktop, тесты по таблицам §1 |
 | **Чеклист до переноса в `core/`** | BUG-01–07 по §0.4; в legacy — согласованность имён ORM (например `person_id_related`) |
+| **Архитектурный реестр** | [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) — ADR-lite, не дублировать в чатах |
 
 ---
 

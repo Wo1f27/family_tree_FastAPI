@@ -265,8 +265,8 @@ def create_person(dto: CreatePersonDTO, user: User = Depends(get_current_user), 
         first_name=person.first_name,
         last_name=person.last_name,
         middle_name=person.middle_name,
-        date_birth=person.date_birth,
-        date_death=person.date_death,
+        date_of_birth=person.date_of_birth,
+        date_of_death=person.date_of_death,
         gender=person.gender,
         biography=person.biography,
         created_at=person.created_at,
@@ -285,8 +285,8 @@ def get_persons(
     return [
         PersonResponseDTO(
             id=p.id, first_name=p.first_name, last_name=p.last_name,
-            middle_name=p.middle_name, date_birth=p.date_birth,
-            date_death=p.date_death, gender=p.gender, biography=p.biography,
+            middle_name=p.middle_name, date_of_birth=p.date_of_birth,
+            date_of_death=p.date_of_death, gender=p.gender, biography=p.biography,
             created_at=p.created_at, updated_at=p.updated_at,
         )
         for p in persons
@@ -300,8 +300,8 @@ def get_person(person_id: int, user: User = Depends(get_current_user), db=Depend
     person = use_case.execute(person_id, user.id)
     return PersonResponseDTO(
         id=person.id, first_name=person.first_name, last_name=person.last_name,
-        middle_name=person.middle_name, date_birth=person.date_birth,
-        date_death=person.date_death, gender=person.gender, biography=person.biography,
+        middle_name=person.middle_name, date_of_birth=person.date_of_birth,
+        date_of_death=person.date_of_death, gender=person.gender, biography=person.biography,
         created_at=person.created_at, updated_at=person.updated_at,
     )
 
@@ -317,8 +317,8 @@ def update_person(
     person = use_case.execute(dto, user.id)
     return PersonResponseDTO(
         id=person.id, first_name=person.first_name, last_name=person.last_name,
-        middle_name=person.middle_name, date_birth=person.date_birth,
-        date_death=person.date_death, gender=person.gender, biography=person.biography,
+        middle_name=person.middle_name, date_of_birth=person.date_of_birth,
+        date_of_death=person.date_of_death, gender=person.gender, biography=person.biography,
         created_at=person.created_at, updated_at=person.updated_at,
     )
 
@@ -359,7 +359,7 @@ def create_relationship(dto: CreateRelationshipDTO, user: User = Depends(get_cur
     use_case = CreateRelationshipUseCase(person_repo, rel_repo)
     rel = use_case.execute(dto, user.id)
     return RelationshipResponseDTO(
-        id=rel.id, person_1=rel.person_1, person_2=rel.person_2,
+        id=rel.id, person_id=rel.person_id, person_id_related=rel.person_id_related,
         relationship_type=rel.relationship_type, start_date=rel.start_date,
         end_date=rel.end_date, created_at=rel.created_at,
     )
@@ -379,7 +379,7 @@ def get_relationships(
         rels = use_case.execute(person_id)
     return [
         RelationshipResponseDTO(
-            id=r.id, person_1=r.person_1, person_2=r.person_2,
+            id=r.id, person_id=r.person_id, person_id_related=r.person_id_related,
             relationship_type=r.relationship_type, start_date=r.start_date,
             end_date=r.end_date, created_at=r.created_at,
         )

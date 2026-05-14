@@ -57,11 +57,12 @@ family_tree/
 3. Ввести `core/` и перенести use cases; Tkinter только вызывает их (**C**).
 4. Добавить FastAPI (**D**), визуализацию дерева (**E**).
 
-Подробнее: [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) §0.1–0.6, [ARCHITECTURE.md](ARCHITECTURE.md), [mvp-guide/README.md](mvp-guide/README.md).
+Подробнее: [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) §0.1–0.6, [ARCHITECTURE.md](ARCHITECTURE.md), [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md), [mvp-guide/README.md](mvp-guide/README.md).
 
 ## Документы
 
-- `ARCHITECTURE.md` — слои и модули подробно.
-- `PROJECT_STRUCTURE.md` — расширенный чертёж каталогов.
-- `MVP_TASK_PLAN.md` — фазы, задачи MVP-*, календарь.
-- `mvp-guide/` — пошаговые инструкции с примерами кода.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — слои и модули подробно.
+- [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) — зафиксированные архитектурные решения (ADR-lite).
+- [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) — расширенный чертёж каталогов.
+- [MVP_TASK_PLAN.md](MVP_TASK_PLAN.md) — фазы, задачи MVP-*, календарь.
+- [mvp-guide/README.md](mvp-guide/README.md) — пошаговые инструкции; [mvp-guide/00-schema-and-mapping.md](mvp-guide/00-schema-and-mapping.md) — схема данных.

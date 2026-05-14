@@ -4,14 +4,16 @@
 
 ### MVP-INFRA-01 — Настройка проекта: структура папок, pyproject.toml, requirements
 
-**Что уже есть:** Структура `core/` частично создана, `pyproject.toml` и `requirements/` существуют.
+**Что уже есть в репозитории:** рабочий десктоп в корне (`main.py`, `gui.py`, `models.py`, `database.py`). Каталог `core/` может отсутствовать — его создаёте на фазе C.
 
 **Что нужно сделать:**
 
-1. **Уточнить структуру** — текущая структура уже близка к целевой, но нужно убедиться, что все `__init__.py` на месте и отсутствуют циклические импорты.
-2. **Обновить `pyproject.toml`** — добавить `alembic`, `aiosqlite`, `email-validator`, `passlib` в зависимости.
-3. **Обновить `requirements/base.txt`** — синхронизировать с `pyproject.toml`.
-4. **Создать `conftest.py` на корневом уровне** — если его нет, для общих фикстур.
+1. **Создать структуру `core/...`** по [ARCHITECTURE.md](../ARCHITECTURE.md), все `__init__.py`, без циклических импортов.
+2. **`pyproject.toml`** (или актуальный `requirements.txt`) — добавить `alembic`, `email-validator`, `passlib` и т.д. по плану.
+3. **При разбиении requirements** — `requirements/base.txt` и др., если вводите такую раскладку.
+4. **`conftest.py`** в корне — для pytest.
+
+Схема полей БД и домена для примеров ниже — в **[00-schema-and-mapping.md](00-schema-and-mapping.md)**.
 
 **Файлы:**
 - `pyproject.toml` — обновить зависимости
@@ -22,11 +24,7 @@
 
 ### MVP-INFRA-02 — SQLAlchemy модели: User, Person, Relationship
 
-**Что уже есть:** Доменные сущности (`core/domain/entities/`), но нет SQLAlchemy моделей.
-
-**Что нужно сделать:**
-
-Создать файлы SQLAlchemy-моделей с методами `to_domain()` / `from_domain()`.
+**Что нужно сделать:** перенести/дублировать ORM в `core/infrastructure/database/models/` с методами `to_domain()` / `from_domain()`, согласованными с **[00-schema-and-mapping.md](00-schema-and-mapping.md)** (имена `date_of_birth`, `person_id` / `person_id_related`).
 
 ```python path=core/infrastructure/database/models/base.py
 from datetime import datetime, UTC
@@ -94,13 +92,14 @@ class PersonModel(Base, TimestampMixin):
     __tablename__ = "persons"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # До таблицы users: без FK. После MVP auth: ForeignKey("users.id").
+    owner_id = Column(Integer, nullable=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     middle_name = Column(String(100), nullable=True)
-    date_birth = Column(Date, nullable=True)
-    date_death = Column(Date, nullable=True)
-    gender = Column(String(10), nullable=True)  # nullable — пол может быть не указан
+    date_of_birth = Column(Date, nullable=True)
+    date_of_death = Column(Date, nullable=True)
+    gender = Column(String(10), nullable=False)  # в домене лучше Gender | None — см. блок ниже
     biography = Column(Text, nullable=True)
 
     def to_domain(self) -> Person:
@@ -110,8 +109,8 @@ class PersonModel(Base, TimestampMixin):
             first_name=self.first_name,
             last_name=self.last_name,
             middle_name=self.middle_name,
-            date_birth=self.date_birth,
-            date_death=self.date_death,
+            date_of_birth=self.date_of_birth,
+            date_of_death=self.date_of_death,
             gender=Gender(self.gender) if self.gender else None,
             biography=self.biography,
             created_at=self.created_at,
@@ -126,12 +125,10 @@ class PersonModel(Base, TimestampMixin):
             first_name=person.first_name,
             last_name=person.last_name,
             middle_name=person.middle_name,
-            date_birth=person.date_birth,
-            date_death=person.date_death,
+            date_of_birth=person.date_of_birth,
+            date_of_death=person.date_of_death,
             gender=person.gender.value if person.gender else None,
             biography=person.biography,
-            # created_at/updated_at НЕ передаём при создании новой записи —
-            # они назначаются БД через default. Передаём только при обновлении.
         )
 ```
 
@@ -142,48 +139,40 @@ class PersonModel(Base, TimestampMixin):
 > Это единственное место, где доменный слой должен быть скорректирован ради реального MVP-сценария.
 
 ```python path=core/infrastructure/database/models/relationship_model.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-from core.infrastructure.database.models.base import Base, TimestampMixin
-from core.domain.entities.relationship import Relationship, RelationshipType
+from sqlalchemy import Column, Integer, String, ForeignKey
+from core.infrastructure.database.models.base import Base
+from core.domain.entities.relationship import Relationship
 
 
-class RelationshipModel(Base, TimestampMixin):
+class RelationshipModel(Base):
+    """Совпадает с корневым legacy `models.Relationship`: без created_at на таблице связей."""
+
     __tablename__ = "relationships"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    person_1 = Column(Integer, ForeignKey("persons.id"), nullable=False)
-    person_2 = Column(Integer, ForeignKey("persons.id"), nullable=False)
-    relationship_type = Column(String(20), nullable=False)
-    start_date = Column(DateTime, nullable=True)  # DateTime, не Date — совпадает с доменной сущностью
-    end_date = Column(DateTime, nullable=True)    # DateTime, не Date — совпадает с доменной сущностью
+    person_id = Column(Integer, ForeignKey("persons.id"), nullable=False)
+    person_id_related = Column(Integer, ForeignKey("persons.id"), nullable=False)
+    relationship_type = Column(String(100), nullable=False)
 
     def to_domain(self) -> Relationship:
         return Relationship(
             id=self.id,
-            person_1=self.person_1,
-            person_2=self.person_2,
-            relationship_type=RelationshipType(self.relationship_type),
-            start_date=self.start_date,
-            end_date=self.end_date,
-            created_at=self.created_at,
+            person_id=self.person_id,
+            person_id_related=self.person_id_related,
+            relationship_type=self.relationship_type,
         )
 
     @classmethod
     def from_domain(cls, rel: Relationship) -> "RelationshipModel":
         return cls(
             id=rel.id,
-            person_1=rel.person_1,
-            person_2=rel.person_2,
-            relationship_type=rel.relationship_type.value,
-            start_date=rel.start_date,
-            end_date=rel.end_date,
-            # created_at/updated_at НЕ передаём — назначаются БД через default
+            person_id=rel.person_id,
+            person_id_related=rel.person_id_related,
+            relationship_type=rel.relationship_type,
         )
 ```
 
-> **⚠️ Критично:** Доменная сущность `Relationship` объявляет `start_date: datetime | None` и `end_date: datetime | None`.
-> Если использовать `Column(Date)` в модели, произойдёт неявное приведение `date → datetime` при `to_domain()`
-> и потеря времени при `from_domain()`. Типы колонок должны совпадать с доменной сущностью.
+> **Домен `Relationship`:** поля `id`, `person_id`, `person_id_related`, `relationship_type: str` (или узкий StrEnum со значениями `father` / `mother` / …). См. **[00-schema-and-mapping.md](00-schema-and-mapping.md)**.
 
 ```python path=core/infrastructure/database/models/__init__.py
 from core.infrastructure.database.models.base import Base
@@ -200,9 +189,9 @@ __all__ = [
 ```
 
 **Ключевые моменты:**
-- Имена колонок БД должны точно совпадать с полями доменных сущностей (`owner_id`, `person_1`, `person_2`, `date_birth`, `date_death`).
-- `relationship_type` хранить как `String`, конвертировать через `RelationshipType.value` / `RelationshipType(...)`.
-- `gender` аналогично — хранить как `String`, конвертировать через `Gender(...)`.
+- Имена колонок БД совпадают с доменом: `owner_id`, `date_of_birth`, `date_of_death`, `person_id`, `person_id_related` — см. **[00-schema-and-mapping.md](00-schema-and-mapping.md)**.
+- `relationship_type` — строка (или enum со `.value`).
+- `gender` — строка в БД, в домене `Gender | None` при необходимости.
 
 ---
 
@@ -417,7 +406,7 @@ class SQLAlchemyPersonRepository(PersonRepository):
         if not db_model:
             raise ValueError(f"Person {person.id} not found")
         for field in ["owner_id", "first_name", "last_name", "middle_name",
-                       "date_birth", "date_death", "gender", "biography"]:
+                       "date_of_birth", "date_of_death", "gender", "biography"]:
             setattr(db_model, field, getattr(person, field))
         self._db.commit()
         self._db.refresh(db_model)
@@ -460,7 +449,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from core.domain.repositories.relationship_repository import RelationshipRepository
-from core.domain.entities.relationship import Relationship, RelationshipType
+from core.domain.entities.relationship import Relationship
 from core.infrastructure.database.models.relationship_model import RelationshipModel
 
 
@@ -493,7 +482,7 @@ class SQLAlchemyRelationshipRepository(RelationshipRepository):
         ).first()
         if not db_model:
             raise ValueError(f"Relationship {relationship.id} not found")
-        for field in ["person_1", "person_2", "relationship_type", "start_date", "end_date"]:
+        for field in ["person_id", "person_id_related", "relationship_type"]:
             setattr(db_model, field, getattr(relationship, field))
         self._db.commit()
         self._db.refresh(db_model)
@@ -510,29 +499,29 @@ class SQLAlchemyRelationshipRepository(RelationshipRepository):
         return False
 
     def get_by_person_id(self, person_id: int) -> List[Relationship]:
-        """Все связи, где персона участвует как person_1 или person_2"""
+        """Все рёбра, где персона — субъект или второй конец."""
         db_models = (
             self._db.query(RelationshipModel)
             .filter(or_(
-                RelationshipModel.person_1 == person_id,
-                RelationshipModel.person_2 == person_id
+                RelationshipModel.person_id == person_id,
+                RelationshipModel.person_id_related == person_id
             ))
             .all()
         )
         return [model.to_domain() for model in db_models]
 
     def get_by_type(
-        self, person_id: int, relationship_type: RelationshipType
+        self, person_id: int, relationship_type: str
     ) -> List[Relationship]:
-        """Связи определённого типа для персоны"""
+        """Связи заданного типа, где персона участвует с любой стороны."""
         db_models = (
             self._db.query(RelationshipModel)
             .filter(
                 or_(
-                    RelationshipModel.person_1 == person_id,
-                    RelationshipModel.person_2 == person_id
+                    RelationshipModel.person_id == person_id,
+                    RelationshipModel.person_id_related == person_id
                 ),
-                RelationshipModel.relationship_type == relationship_type.value
+                RelationshipModel.relationship_type == relationship_type
             )
             .all()
         )
@@ -546,8 +535,8 @@ class SQLAlchemyRelationshipRepository(RelationshipRepository):
 ```
 
 **Ключевые моменты:**
-- `get_by_person_id` — возвращает связи, где `person_1 == person_id OR person_2 == person_id`
-- Проверка дубликатов: перед `create` проверять, нет ли уже связи (person_1, person_2, type)
+- `get_by_person_id` — `person_id == person_id OR person_id_related == person_id`
+- Проверка дубликатов перед `create` — с учётом семантики `father`/`mother`/`child` (см. текущий `gui.py` и **00-schema-and-mapping.md**).
 
 ---
 

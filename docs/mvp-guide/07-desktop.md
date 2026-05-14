@@ -231,8 +231,8 @@ class MainView(Frame):
             persons = use_case.execute(self.app.current_user.id)
             for p in persons:
                 self.tree.insert("", tk.END, values=(
-                    p.id, p.full_name,
-                    p.date_birth or "", p.date_death or "",
+                    p.id, f"{p.last_name} {p.first_name}",
+                    p.date_of_birth or "", p.date_of_death or "",
                     p.gender.value if p.gender else "",
                 ))
         finally:
@@ -323,12 +323,12 @@ class PersonFormView:
         self.middle_name.grid(row=2, column=1)
 
         Label(frame, text="Дата рождения").grid(row=3, column=0, sticky=tk.W)
-        self.date_birth = Entry(frame, width=30)
-        self.date_birth.grid(row=3, column=1)
+        self.date_of_birth = Entry(frame, width=30)
+        self.date_of_birth.grid(row=3, column=1)
 
         Label(frame, text="Дата смерти").grid(row=4, column=0, sticky=tk.W)
-        self.date_death = Entry(frame, width=30)
-        self.date_death.grid(row=4, column=1)
+        self.date_of_death = Entry(frame, width=30)
+        self.date_of_death.grid(row=4, column=1)
 
         Label(frame, text="Пол").grid(row=5, column=0, sticky=tk.W)
         self.gender = Combobox(frame, values=["male", "female", "other"], width=27)
@@ -357,10 +357,10 @@ class PersonFormView:
             self.last_name.insert(0, person.last_name)
             if person.middle_name:
                 self.middle_name.insert(0, person.middle_name)
-            if person.date_birth:
-                self.date_birth.insert(0, str(person.date_birth))
-            if person.date_death:
-                self.date_death.insert(0, str(person.date_death))
+            if person.date_of_birth:
+                self.date_of_birth.insert(0, str(person.date_of_birth))
+            if person.date_of_death:
+                self.date_of_death.insert(0, str(person.date_of_death))
             if person.gender:
                 self.gender.set(person.gender.value)
             if person.biography:
@@ -385,8 +385,8 @@ class PersonFormView:
                     first_name=self.first_name.get() or None,
                     last_name=self.last_name.get() or None,
                     middle_name=self.middle_name.get() or None,
-                    date_birth=self.date_birth.get() or None,
-                    date_death=self.date_death.get() or None,
+                    date_of_birth=self.date_of_birth.get() or None,
+                    date_of_death=self.date_of_death.get() or None,
                     gender=self.gender.get() or None,
                     biography=self.biography.get("1.0", tk.END).strip() or None,
                 )
@@ -397,8 +397,8 @@ class PersonFormView:
                     first_name=self.first_name.get(),
                     last_name=self.last_name.get(),
                     middle_name=self.middle_name.get() or None,
-                    date_birth=self.date_birth.get() or None,
-                    date_death=self.date_death.get() or None,
+                    date_of_birth=self.date_of_birth.get() or None,
+                    date_of_death=self.date_of_death.get() or None,
                     gender=self.gender.get() or None,
                     biography=self.biography.get("1.0", tk.END).strip() or None,
                 )
@@ -468,7 +468,7 @@ class RelationshipPanel(Frame):
         persons = GetAllPersonsUseCase(person_repo).execute(self.app.current_user.id)
         db.close()
         self._persons = [p for p in persons if p.id != self.person_id]
-        self.person_combo["values"] = [f"{p.id}: {p.full_name}" for p in self._persons]
+        self.person_combo["values"] = [f"{p.id}: {p.last_name} {p.first_name}" for p in self._persons]
 
     def load_relationships(self):
         for item in self.tree.get_children():
@@ -481,8 +481,9 @@ class RelationshipPanel(Frame):
         rels = GetRelationshipsUseCase(rel_repo).execute(self.person_id)
         db.close()
         for r in rels:
-            other_id = r.person_2 if r.person_1 == self.person_id else r.person_1
-            self.tree.insert("", tk.END, values=(r.id, other_id, r.relationship_type.value))
+            other_id = r.person_id_related if r.person_id == self.person_id else r.person_id
+            rt = r.relationship_type.value if hasattr(r.relationship_type, "value") else r.relationship_type
+            self.tree.insert("", tk.END, values=(r.id, other_id, rt))
 
     def add_relationship(self):
         selection = self.person_combo.get()
@@ -503,7 +504,11 @@ class RelationshipPanel(Frame):
             db = SyncSessionLocal()
             person_repo = SQLAlchemyPersonRepository(db)
             rel_repo = SQLAlchemyRelationshipRepository(db)
-            dto = CreateRelationshipDTO(person_1=self.person_id, person_2=other_id, relationship_type=rel_type)
+            dto = CreateRelationshipDTO(
+                person_id=self.person_id,
+                person_id_related=other_id,
+                relationship_type=rel_type,
+            )
             CreateRelationshipUseCase(person_repo, rel_repo).execute(dto, self.app.current_user.id)
             db.close()
             self.load_relationships()
@@ -740,22 +745,22 @@ class TreeCanvasView(Frame):
 
         # Модальное окно с данными персоны
         detail = tk.Toplevel(self.app.root)
-        detail.title(person.full_name)
+        detail.title(f"{person.last_name} {person.first_name}")
         detail.geometry("350x300")
 
-        tk.Label(detail, text=person.full_name, font=("Arial", 14, "bold")).pack(pady=10)
+        tk.Label(detail, text=f"{person.last_name} {person.first_name}", font=("Arial", 14, "bold")).pack(pady=10)
 
         info_frame = tk.Frame(detail)
         info_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
 
         row = 0
-        if person.date_birth:
+        if person.date_of_birth:
             tk.Label(info_frame, text="Дата рождения:").grid(row=row, column=0, sticky=tk.W)
-            tk.Label(info_frame, text=str(person.date_birth)).grid(row=row, column=1, sticky=tk.W)
+            tk.Label(info_frame, text=str(person.date_of_birth)).grid(row=row, column=1, sticky=tk.W)
             row += 1
-        if person.date_death:
+        if person.date_of_death:
             tk.Label(info_frame, text="Дата смерти:").grid(row=row, column=0, sticky=tk.W)
-            tk.Label(info_frame, text=str(person.date_death)).grid(row=row, column=1, sticky=tk.W)
+            tk.Label(info_frame, text=str(person.date_of_death)).grid(row=row, column=1, sticky=tk.W)
             row += 1
         if person.gender:
             tk.Label(info_frame, text="Пол:").grid(row=row, column=0, sticky=tk.W)

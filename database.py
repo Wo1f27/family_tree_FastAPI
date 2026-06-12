@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -52,5 +52,45 @@ class Base(DeclarativeBase):
     pass
 
 
-def init_db():
+# (таблица, колонка, тип SQLite) — добавляются при обновлении старой БД без потери данных.
+_SQLITE_COLUMN_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    ('phones', 'created_at', 'DATETIME'),
+    ('phones', 'updated_at', 'DATETIME'),
+    ('addresses', 'created_at', 'DATETIME'),
+    ('addresses', 'updated_at', 'DATETIME'),
+)
+
+
+def _sqlite_table_exists(conn, table: str) -> bool:
+    row = conn.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :name"),
+        {'name': table},
+    ).first()
+    return row is not None
+
+
+def _sqlite_column_names(conn, table: str) -> set[str]:
+    rows = conn.execute(text(f'PRAGMA table_info("{table}")')).fetchall()
+    return {row[1] for row in rows}
+
+
+def _apply_sqlite_migrations() -> None:
+    """Добавить недостающие колонки в существующие таблицы (SQLite)."""
+    if engine.dialect.name != 'sqlite':
+        return
+
+    with engine.begin() as conn:
+        for table, column, col_type in _SQLITE_COLUMN_MIGRATIONS:
+            if not _sqlite_table_exists(conn, table):
+                continue
+            if column in _sqlite_column_names(conn, table):
+                continue
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {col_type}'))
+
+
+def init_db() -> None:
+    # Регистрация моделей в metadata перед create_all.
+    import models  # noqa: F401
+
     Base.metadata.create_all(engine)
+    _apply_sqlite_migrations()

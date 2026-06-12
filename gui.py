@@ -1,3 +1,4 @@
+from collections.abc import Callable
 import json
 import tkinter as tk
 from dataclasses import dataclass
@@ -9,11 +10,12 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from database import DATA_DIR, SessionLocal, init_db
-from models import Gender, Person, Relationship
+from models import Address, Gender, Person, Phone, Relationship
 
 UI_SETTINGS_PATH = DATA_DIR / 'ui_settings.json'
 MIN_FONT_SIZE = 8
 MAX_FONT_SIZE = 28
+INFO_CONTACT_MAX_LINES = 5
 
 
 @dataclass
@@ -87,6 +89,32 @@ class PersonData:
     date_of_birth: date | None
     date_of_death: date | None
     biography: str | None
+    phones: list[str]
+    addresses: list[str]
+
+
+def _load_person_phones(session: Session, person_id: int) -> list[str]:
+    stmt = select(Phone.number).where(Phone.person_id == person_id).order_by(Phone.id)
+    return list(session.scalars(stmt).all())
+
+
+def _load_person_addresses(session: Session, person_id: int) -> list[str]:
+    stmt = select(Address.address).where(Address.person_id == person_id).order_by(Address.id)
+    return list(session.scalars(stmt).all())
+
+
+def _save_person_contacts(
+    session: Session,
+    person_id: int,
+    phones: list[str],
+    addresses: list[str],
+) -> None:
+    session.execute(delete(Phone).where(Phone.person_id == person_id))
+    session.execute(delete(Address).where(Address.person_id == person_id))
+    for number in phones:
+        session.add(Phone(person_id=person_id, number=number))
+    for addr in addresses:
+        session.add(Address(person_id=person_id, address=addr))
 
 
 GENDER_LABELS_RU: dict[str, str] = {
@@ -299,8 +327,34 @@ class GenealogyApp:
             self._info_death,
         )
 
-        ttk.Label(self._info_grid, text='Биография:', anchor=tk.NW).grid(
+        ttk.Label(self._info_grid, text='Телефоны:', anchor=tk.NW).grid(
             row=5, column=0, sticky=tk.NW, pady=(4, 0)
+        )
+        self._info_phones = tk.Text(
+            self._info_grid,
+            height=1,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            relief=tk.FLAT,
+            font=self._font_settings.tk_font(),
+        )
+        self._info_phones.grid(row=5, column=1, sticky=tk.EW, pady=(4, 0))
+
+        ttk.Label(self._info_grid, text='Адреса:', anchor=tk.NW).grid(
+            row=6, column=0, sticky=tk.NW, pady=(4, 0)
+        )
+        self._info_addresses = tk.Text(
+            self._info_grid,
+            height=1,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            relief=tk.FLAT,
+            font=self._font_settings.tk_font(),
+        )
+        self._info_addresses.grid(row=6, column=1, sticky=tk.EW, pady=(4, 0))
+
+        ttk.Label(self._info_grid, text='Биография:', anchor=tk.NW).grid(
+            row=7, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_bio = tk.Text(
             self._info_grid,
@@ -310,10 +364,10 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_bio.grid(row=5, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_bio.grid(row=7, column=1, sticky=tk.EW, pady=(4, 0))
 
         ttk.Label(self._info_grid, text='Связи:', anchor=tk.NW).grid(
-            row=6, column=0, sticky=tk.NW, pady=(4, 0)
+            row=8, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_rels = tk.Text(
             self._info_grid,
@@ -323,9 +377,12 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_rels.grid(row=6, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_rels.grid(row=8, column=1, sticky=tk.EW, pady=(4, 0))
 
         self._info_grid.columnconfigure(1, weight=1)
+
+        self._info_phone_line_count = 1
+        self._info_address_line_count = 1
 
         self._info_grid.bind('<Configure>', self._on_info_grid_configure)
         self._info_canvas.bind('<Configure>', self._on_info_canvas_configure)
@@ -365,10 +422,19 @@ class GenealogyApp:
             return 3
         return 4
 
+    @staticmethod
+    def _info_lines_for_record_count(count: int) -> int:
+        if count <= 0:
+            return 1
+        return min(count, INFO_CONTACT_MAX_LINES)
+
     def _info_panel_canvas_height(self) -> int:
         line_h = self._font_settings.size + 10
         rows_h = 5 * line_h
-        text_h = 2 * self._info_text_height_lines() * line_h
+        phone_lines = self._info_phone_line_count
+        address_lines = self._info_address_line_count
+        text_lines = self._info_text_height_lines()
+        text_h = (phone_lines + address_lines + 2 * text_lines) * line_h
         return rows_h + text_h + 28
 
     def _on_info_grid_configure(self, _event: tk.Event | None = None) -> None:
@@ -408,8 +474,11 @@ class GenealogyApp:
 
     def _relayout_info_panel(self) -> None:
         text_lines = self._info_text_height_lines()
+        font = self._font_settings.tk_font()
+        self._info_phones.configure(height=self._info_phone_line_count, font=font)
+        self._info_addresses.configure(height=self._info_address_line_count, font=font)
         for widget in (self._info_bio, self._info_rels):
-            widget.configure(height=text_lines, font=self._font_settings.tk_font())
+            widget.configure(height=text_lines, font=font)
 
         desired = self._info_panel_canvas_height()
         root_h = self.root.winfo_height()
@@ -485,6 +554,13 @@ class GenealogyApp:
                 biography=dialog.result.biography,
             )
             self.db_session.add(person)
+            self.db_session.flush()
+            _save_person_contacts(
+                self.db_session,
+                person.id,
+                dialog.result.phones,
+                dialog.result.addresses,
+            )
             self.db_session.commit()
             self._load_people()
 
@@ -494,7 +570,14 @@ class GenealogyApp:
             messagebox.showwarning('Внимание', 'Выберите человека для редактирования')
             return
 
-        dialog = PersonDialog(self.root, 'Редактировать', person, font_settings=self._font_settings)
+        dialog = PersonDialog(
+            self.root,
+            'Редактировать',
+            person,
+            font_settings=self._font_settings,
+            phones=_load_person_phones(self.db_session, person.id),
+            addresses=_load_person_addresses(self.db_session, person.id),
+        )
         dialog.wait_window()
         if dialog.result:
             person.first_name = dialog.result.first_name
@@ -504,6 +587,12 @@ class GenealogyApp:
             person.date_of_birth = dialog.result.date_of_birth
             person.date_of_death = dialog.result.date_of_death
             person.biography = dialog.result.biography
+            _save_person_contacts(
+                self.db_session,
+                person.id,
+                dialog.result.phones,
+                dialog.result.addresses,
+            )
 
             self.db_session.commit()
             self._load_people()
@@ -516,7 +605,7 @@ class GenealogyApp:
 
         if not messagebox.askyesno(
             'Подтверждение',
-            f'Удалить {person.last_name} {person.first_name} и все связи, где он участвует?',
+            f'Удалить {person.last_name} {person.first_name}, все связи, телефоны и адреса?',
         ):
             return
 
@@ -539,6 +628,11 @@ class GenealogyApp:
         self._info_death.config(text='—')
         self._set_info_text_widget(self._info_bio, '')
         self._set_info_text_widget(self._info_rels, 'Выберите человека в таблице.')
+        self._set_info_text_widget(self._info_phones, '')
+        self._set_info_text_widget(self._info_addresses, '')
+        self._info_phone_line_count = 1
+        self._info_address_line_count = 1
+        self._relayout_info_panel()
 
     def _manage_relationships(self) -> None:
         person = self._get_selected_person()
@@ -562,6 +656,11 @@ class GenealogyApp:
                 f'{_rel_type_label(type_key)}: {other.last_name} {other.first_name}'
             )
 
+        phones = _load_person_phones(self.db_session, person.id)
+        addresses = _load_person_addresses(self.db_session, person.id)
+        self._info_phone_line_count = self._info_lines_for_record_count(len(phones))
+        self._info_address_line_count = self._info_lines_for_record_count(len(addresses))
+
         fio = f'{person.last_name} {person.first_name}'.strip()
         self._info_name.config(text=fio)
         self._info_middle.config(text=person.middle_name or '—')
@@ -573,9 +672,16 @@ class GenealogyApp:
             text=person.date_of_death.strftime('%Y-%m-%d') if person.date_of_death else '—'
         )
         self._set_info_text_widget(self._info_bio, person.biography or '')
+        self._set_info_text_widget(
+            self._info_phones,
+            '\n'.join(phones) if phones else '—',
+        )
+        self._set_info_text_widget(
+            self._info_addresses,
+            '\n'.join(addresses) if addresses else '—',
+        )
         self._set_info_text_widget(self._info_rels, '\n'.join(rel_lines) if rel_lines else 'Нет связей.')
-        self.root.after_idle(self._on_info_grid_configure)
-        self.root.after_idle(self._update_info_wraplengths)
+        self._relayout_info_panel()
 
 
 class FontSettingsDialog(tk.Toplevel):
@@ -677,6 +783,94 @@ class FontSettingsDialog(tk.Toplevel):
         self.destroy()
 
 
+class MultiValuePanel(ttk.LabelFrame):
+    """Список строк (телефоны, адреса) с добавлением и удалением."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        title: str,
+        initial: list[str] | None = None,
+        *,
+        font_settings: UiFontSettings | None = None,
+        min_rows: int = 1,
+        max_rows: int = 5,
+        on_change: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(parent, text=title, padding=4)
+        self._min_rows = min_rows
+        self._max_rows = max_rows
+        self._on_change = on_change
+        font = (font_settings or UiFontSettings.load(parent)).tk_font()
+
+        list_row = ttk.Frame(self)
+        list_row.pack(fill=tk.X)
+
+        self._listbox = tk.Listbox(
+            list_row,
+            height=min_rows,
+            exportselection=False,
+            font=font,
+        )
+        self._scrollbar = ttk.Scrollbar(list_row, orient=tk.VERTICAL, command=self._listbox.yview)
+        self._listbox.configure(yscrollcommand=self._scrollbar.set)
+        self._listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        for value in initial or []:
+            if value.strip():
+                self._listbox.insert(tk.END, value.strip())
+
+        input_row = ttk.Frame(self)
+        input_row.pack(fill=tk.X, pady=(4, 0))
+        self._entry_var = tk.StringVar()
+        self._entry = ttk.Entry(input_row, textvariable=self._entry_var, width=24)
+        self._entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._entry.bind('<Return>', lambda _e: self._add_value())
+        ttk.Button(input_row, text='+', command=self._add_value, width=3).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(input_row, text='−', command=self._remove_selected, width=3).pack(
+            side=tk.LEFT, padx=(2, 0)
+        )
+
+        self._resize_list(notify=False)
+
+    def _notify_change(self) -> None:
+        if self._on_change:
+            self._on_change()
+
+    def _resize_list(self, notify: bool = True) -> None:
+        count = self._listbox.size()
+        rows = min(max(self._min_rows, count), self._max_rows)
+        self._listbox.configure(height=rows)
+        if count > self._max_rows:
+            self._scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        else:
+            self._scrollbar.pack_forget()
+        if notify:
+            self._notify_change()
+
+    def _add_value(self) -> None:
+        value = self._entry_var.get().strip()
+        if not value:
+            return
+        self._listbox.insert(tk.END, value)
+        self._entry_var.set('')
+        self._resize_list()
+
+    def _remove_selected(self) -> None:
+        selection = self._listbox.curselection()
+        if not selection:
+            return
+        self._listbox.delete(selection[0])
+        self._resize_list()
+
+    def get_values(self) -> list[str]:
+        return [
+            self._listbox.get(i).strip()
+            for i in range(self._listbox.size())
+            if self._listbox.get(i).strip()
+        ]
+
+
 class PersonDialog(tk.Toplevel):
     def __init__(
         self,
@@ -685,74 +879,174 @@ class PersonDialog(tk.Toplevel):
         person: Person | None = None,
         *,
         font_settings: UiFontSettings | None = None,
+        phones: list[str] | None = None,
+        addresses: list[str] | None = None,
     ) -> None:
         super().__init__(parent)
         self.title(title)
-        self.geometry('420x520')
         self.transient(parent)
         self.result: PersonData | None = None
         self._font_settings = font_settings or UiFontSettings.load(parent)
 
-        self._create_widgets(person)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-    def _create_widgets(self, person: Person | None) -> None:
-        ttk.Label(self, text='Имя:').pack(pady=(10, 0))
+        self._create_widgets(person, phones or [], addresses or [])
+        self.after_idle(self._fit_window)
+
+    def _schedule_fit(self) -> None:
+        self.after_idle(self._fit_window)
+
+    def _on_form_configure(self, _event: tk.Event | None = None) -> None:
+        self._canvas.configure(scrollregion=self._canvas.bbox('all'))
+
+    def _on_canvas_configure(self, event: tk.Event) -> None:
+        self._canvas.itemconfigure(self._canvas_window, width=event.width)
+
+    def _bind_form_mousewheel(self, _event: tk.Event) -> None:
+        if self._scroll_visible:
+            self._canvas.bind_all('<MouseWheel>', self._on_form_mousewheel)
+            self._canvas.bind_all('<Button-4>', self._on_form_mousewheel_linux)
+            self._canvas.bind_all('<Button-5>', self._on_form_mousewheel_linux)
+
+    def _unbind_form_mousewheel(self, _event: tk.Event) -> None:
+        self._canvas.unbind_all('<MouseWheel>')
+        self._canvas.unbind_all('<Button-4>')
+        self._canvas.unbind_all('<Button-5>')
+
+    def _on_form_mousewheel(self, event: tk.Event) -> None:
+        self._canvas.yview_scroll(int(-event.delta / 120), 'units')
+
+    def _on_form_mousewheel_linux(self, event: tk.Event) -> None:
+        delta = -1 if event.num == 4 else 1
+        self._canvas.yview_scroll(delta, 'units')
+
+    def _fit_window(self) -> None:
+        self.update_idletasks()
+        form_h = self._form.winfo_reqheight()
+        btn_h = self._btn_frame.winfo_reqheight()
+        vertical_pad = 42
+        total_h = form_h + btn_h + vertical_pad
+        max_h = int(self.winfo_screenheight() * 0.92)
+        width = max(460, min(560, self.winfo_reqwidth() + 24))
+
+        if total_h <= max_h:
+            self._scroll_visible = False
+            self._vscroll.grid_remove()
+            self._canvas.configure(height=form_h)
+            self.geometry(f'{width}x{total_h}')
+            self.minsize(420, min(total_h, max_h))
+        else:
+            self._scroll_visible = True
+            canvas_h = max(280, max_h - btn_h - vertical_pad)
+            self._canvas.configure(height=canvas_h)
+            self._vscroll.grid(row=0, column=1, sticky=tk.NS)
+            self.geometry(f'{width}x{max_h}')
+            self.minsize(420, 360)
+
+        self._on_form_configure()
+
+    def _create_widgets(
+        self,
+        person: Person | None,
+        phones: list[str],
+        addresses: list[str],
+    ) -> None:
+        self._scroll_visible = False
+
+        body = ttk.Frame(self)
+        body.grid(row=0, column=0, sticky=tk.NSEW, padx=10, pady=(10, 0))
+        body.grid_rowconfigure(0, weight=1)
+        body.grid_columnconfigure(0, weight=1)
+
+        self._canvas = tk.Canvas(body, highlightthickness=0, borderwidth=0)
+        self._vscroll = ttk.Scrollbar(body, orient=tk.VERTICAL, command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=self._vscroll.set)
+        self._canvas.grid(row=0, column=0, sticky=tk.NSEW)
+
+        self._form = ttk.Frame(self._canvas)
+        self._canvas_window = self._canvas.create_window((0, 0), window=self._form, anchor=tk.NW)
+        self._form.bind('<Configure>', self._on_form_configure)
+        self._canvas.bind('<Configure>', self._on_canvas_configure)
+        self._canvas.bind('<Enter>', self._bind_form_mousewheel)
+        self._canvas.bind('<Leave>', self._unbind_form_mousewheel)
+
+        form = self._form
+
+        ttk.Label(form, text='Имя:').pack(anchor=tk.W)
         self.first_name_var = tk.StringVar(value=person.first_name if person else '')
-        ttk.Entry(self, textvariable=self.first_name_var, width=40).pack()
+        ttk.Entry(form, textvariable=self.first_name_var, width=40).pack(fill=tk.X)
 
-        ttk.Label(self, text='Фамилия:').pack(pady=(8, 0))
+        ttk.Label(form, text='Фамилия:').pack(anchor=tk.W, pady=(8, 0))
         self.last_name_var = tk.StringVar(value=person.last_name if person else '')
-        ttk.Entry(self, textvariable=self.last_name_var, width=40).pack()
+        ttk.Entry(form, textvariable=self.last_name_var, width=40).pack(fill=tk.X)
 
-        ttk.Label(self, text='Отчество:').pack(pady=(8, 0))
+        ttk.Label(form, text='Отчество:').pack(anchor=tk.W, pady=(8, 0))
         self.middle_name_var = tk.StringVar(value=person.middle_name or '' if person else '')
-        ttk.Entry(self, textvariable=self.middle_name_var, width=40).pack()
+        ttk.Entry(form, textvariable=self.middle_name_var, width=40).pack(fill=tk.X)
 
-        ttk.Label(self, text='Пол:').pack(pady=(8, 0))
+        ttk.Label(form, text='Пол:').pack(anchor=tk.W, pady=(8, 0))
         if person and person.gender:
             gender_label = _gender_display_raw(person.gender)
         else:
             gender_label = GENDER_LABELS_RU[Gender.MALE.value]
         self.gender_var = tk.StringVar(value=gender_label)
         ttk.Combobox(
-            self,
+            form,
             textvariable=self.gender_var,
             values=GENDER_COMBO_LABELS,
             state='readonly',
             width=12,
-        ).pack()
+        ).pack(anchor=tk.W)
 
-        ttk.Label(self, text='Дата рождения (ГГГГ-ММ-ДД):').pack(pady=(8, 0))
+        ttk.Label(form, text='Дата рождения (ГГГГ-ММ-ДД):').pack(anchor=tk.W, pady=(8, 0))
         birth_date_str = person.date_of_birth.strftime('%Y-%m-%d') if person and person.date_of_birth else ''
         self.birth_date_var = tk.StringVar(value=birth_date_str)
-        ttk.Entry(self, textvariable=self.birth_date_var, width=40).pack()
+        ttk.Entry(form, textvariable=self.birth_date_var, width=40).pack(fill=tk.X)
 
-        ttk.Label(self, text='Дата смерти (опционально):').pack(pady=(8, 0))
+        ttk.Label(form, text='Дата смерти (опционально):').pack(anchor=tk.W, pady=(8, 0))
         death_date_str = person.date_of_death.strftime('%Y-%m-%d') if person and person.date_of_death else ''
         self.death_date_var = tk.StringVar(value=death_date_str)
-        ttk.Entry(self, textvariable=self.death_date_var, width=40).pack()
+        ttk.Entry(form, textvariable=self.death_date_var, width=40).pack(fill=tk.X)
 
-        ttk.Label(self, text='Биография:').pack(pady=(8, 0))
-        bio_frame = ttk.Frame(self)
-        bio_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 8))
+        self._phones_panel = MultiValuePanel(
+            form,
+            'Телефоны',
+            phones,
+            font_settings=self._font_settings,
+            on_change=self._schedule_fit,
+        )
+        self._phones_panel.pack(fill=tk.X, pady=(8, 0))
+
+        self._addresses_panel = MultiValuePanel(
+            form,
+            'Адреса',
+            addresses,
+            font_settings=self._font_settings,
+            on_change=self._schedule_fit,
+        )
+        self._addresses_panel.pack(fill=tk.X, pady=(4, 0))
+
+        ttk.Label(form, text='Биография:').pack(anchor=tk.W, pady=(8, 0))
+        bio_frame = ttk.Frame(form)
+        bio_frame.pack(fill=tk.X, pady=(0, 4))
         self.biography_text = tk.Text(
             bio_frame,
-            height=6,
-            width=40,
+            height=4,
             wrap=tk.WORD,
             font=self._font_settings.tk_font(),
         )
-        self.biography_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.biography_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         sb = ttk.Scrollbar(bio_frame, command=self.biography_text.yview)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.biography_text.configure(yscrollcommand=sb.set)
         if person and person.biography:
             self.biography_text.insert('1.0', person.biography)
 
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text='OK', command=self._on_ok).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=10)
+        self._btn_frame = ttk.Frame(self)
+        self._btn_frame.grid(row=1, column=0, pady=(8, 10))
+        ttk.Button(self._btn_frame, text='OK', command=self._on_ok).pack(side=tk.LEFT, padx=10)
+        ttk.Button(self._btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=10)
 
     def _on_ok(self) -> None:
         first_name = self.first_name_var.get().strip()
@@ -784,6 +1078,8 @@ class PersonDialog(tk.Toplevel):
             date_of_birth=birth,
             date_of_death=death,
             biography=self.biography_text.get('1.0', tk.END).strip() or None,
+            phones=self._phones_panel.get_values(),
+            addresses=self._addresses_panel.get_values(),
         )
         self.destroy()
 

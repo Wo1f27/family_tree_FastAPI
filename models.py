@@ -37,6 +37,18 @@ class Person(Base):
         viewonly=True
     )
 
+    phones: Mapped[list['Phone']] = relationship(
+        back_populates='person',
+        cascade='all, delete-orphan',
+        order_by='Phone.id',
+    )
+
+    addresses: Mapped[list['Address']] = relationship(
+        back_populates='person',
+        cascade='all, delete-orphan',
+        order_by='Address.id',
+    )
+
     @property
     def gender_enum(self) -> Gender:
         if isinstance(self.gender, str):
@@ -66,4 +78,40 @@ class Relationship(Base):
     def __repr__(self):
         return (f'Relationship(person_id={self.person_id}, person_id_related={self.person_id_related}, '
                 f'relationship_type={self.relationship_type})>')
+
+
+class Phone(Base):
+    __tablename__ = 'phones'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey('persons.id', ondelete='CASCADE'), nullable=False)
+    number: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
+    )
+
+    person: Mapped['Person'] = relationship(back_populates='phones')
+
+    def __repr__(self) -> str:
+        return f'Phone(person_id={self.person_id}, number={self.number})>'
+
+
+class Address(Base):
+    __tablename__ = 'addresses'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey('persons.id', ondelete='CASCADE'), nullable=False)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
+    )
+
+    person: Mapped['Person'] = relationship(back_populates='addresses')
+
+    def __repr__(self) -> str:
+        return f'Address(person_id={self.person_id}, address={self.address!r})>'
 

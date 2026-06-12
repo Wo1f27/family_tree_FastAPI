@@ -1,13 +1,81 @@
+import json
 import tkinter as tk
 from dataclasses import dataclass
 from datetime import date, datetime
+from tkinter import font as tkfont
 
 from tkinter import ttk, messagebox
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
-from database import SessionLocal, init_db
+from database import DATA_DIR, SessionLocal, init_db
 from models import Gender, Person, Relationship
+
+UI_SETTINGS_PATH = DATA_DIR / 'ui_settings.json'
+MIN_FONT_SIZE = 8
+MAX_FONT_SIZE = 28
+
+
+@dataclass
+class UiFontSettings:
+    family: str
+    size: int
+
+    @classmethod
+    def defaults(cls, root: tk.Misc) -> 'UiFontSettings':
+        actual = tkfont.nametofont('TkDefaultFont').actual(displayof=root)
+        return cls(family=actual['family'], size=int(actual['size']))
+
+    @classmethod
+    def load(cls, root: tk.Misc) -> 'UiFontSettings':
+        defaults = cls.defaults(root)
+        if not UI_SETTINGS_PATH.is_file():
+            return defaults
+        try:
+            raw = json.loads(UI_SETTINGS_PATH.read_text(encoding='utf-8'))
+            family = str(raw.get('font_family', defaults.family)).strip() or defaults.family
+            size = int(raw.get('font_size', defaults.size))
+            size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, size))
+            return cls(family=_resolve_font_family(root, family), size=size)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return defaults
+
+    def save(self) -> None:
+        UI_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {'font_family': self.family, 'font_size': self.size}
+        UI_SETTINGS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    def tk_font(self, bold: bool = False) -> tuple[str, int, str] | tuple[str, int]:
+        if bold:
+            return (self.family, self.size, 'bold')
+        return (self.family, self.size)
+
+    def tree_rowheight(self) -> int:
+        return self.size + 10
+
+
+def _resolve_font_family(root: tk.Misc, family: str) -> str:
+    available = {name.lower(): name for name in tkfont.families(root)}
+    key = family.strip().lower()
+    if key in available:
+        return available[key]
+    return UiFontSettings.defaults(root).family
+
+
+def _sorted_font_families(root: tk.Misc) -> list[str]:
+    return sorted(tkfont.families(root), key=str.casefold)
+
+
+DATA_TREE_STYLE = 'Data.Treeview'
+DATA_LABEL_STYLE = 'Data.TLabel'
+
+
+def _apply_data_fonts(style: ttk.Style, settings: UiFontSettings) -> None:
+    """Шрифт только для данных (таблицы, значения полей), не для кнопок и подписей UI."""
+    normal = settings.tk_font()
+    rowheight = settings.tree_rowheight()
+    style.configure(DATA_TREE_STYLE, font=normal, rowheight=rowheight)
+    style.configure(DATA_LABEL_STYLE, font=normal)
 
 
 @dataclass
@@ -21,14 +89,27 @@ class PersonData:
     biography: str | None
 
 
+GENDER_LABELS_RU: dict[str, str] = {
+    'male': 'Мужской',
+    'female': 'Женский',
+    'other': 'Другой',
+}
+GENDER_COMBO_LABELS: list[str] = list(GENDER_LABELS_RU.values())
+GENDER_RU_TO_KEY: dict[str, str] = {label: key for key, label in GENDER_LABELS_RU.items()}
+
+
+def _gender_key(gender: Gender | str | None) -> str:
+    if gender is None:
+        return ''
+    if isinstance(gender, Gender):
+        return gender.value
+    return str(gender).strip().lower()
+
+
 def _gender_display_raw(gender: Gender | str | None) -> str:
     if gender is None:
         return '-'
-    if isinstance(gender, Gender):
-        v = gender.value
-    else:
-        v = str(gender)
-    return {'male': 'Мужской', 'female': 'Женский', 'other': 'Другой'}.get(v, v)
+    return GENDER_LABELS_RU.get(_gender_key(gender), _gender_key(gender) or '-')
 
 
 # Семантика записи Relationship:
@@ -147,6 +228,9 @@ class GenealogyApp:
         self.root.minsize(900, 600)
 
         self.db_session = SessionLocal()
+        self._font_settings = UiFontSettings.load(root)
+        self._style = ttk.Style(root)
+        _apply_data_fonts(self._style, self._font_settings)
 
         self._create_widgets()
         self._load_people()
@@ -164,23 +248,41 @@ class GenealogyApp:
         ttk.Button(top_frame, text='Редактировать', command=self._edit_person).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_frame, text='Удалить', command=self._delete_person).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_frame, text='Связи', command=self._manage_relationships).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_frame, text='Настройки', command=self._open_settings).pack(side=tk.RIGHT, padx=5)
 
-        # Нижняя панель — фиксированная высота, чтобы текст не «прыгал»
-        bottom_outer = ttk.Frame(self.root, padding=(10, 0, 10, 10))
-        bottom_outer.pack(side=tk.BOTTOM, fill=tk.X)
+        self._paned = ttk.Panedwindow(self.root, orient=tk.VERTICAL)
+        self._paned.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        middle_frame = ttk.Frame(self._paned, padding=10)
+        self._paned.add(middle_frame, weight=3)
+
+        bottom_outer = ttk.Frame(self._paned, padding=(10, 0, 10, 10))
+        self._paned.add(bottom_outer, weight=1)
+
         info_shell = ttk.LabelFrame(bottom_outer, text='Информация о выбранном человеке', padding=8)
-        info_shell.pack(fill=tk.X)
-        # ttk не всегда держит height; inner tk.Frame с pack_propagate(False)
-        info_inner = tk.Frame(info_shell, height=200, highlightthickness=0)
-        info_inner.pack(fill=tk.X)
-        info_inner.pack_propagate(False)
+        info_shell.pack(fill=tk.BOTH, expand=True)
 
-        grid = ttk.Frame(info_inner)
-        grid.pack(fill=tk.BOTH, expand=True)
+        canvas_row = ttk.Frame(info_shell)
+        canvas_row.pack(fill=tk.BOTH, expand=True)
+        canvas_row.columnconfigure(0, weight=1)
+        canvas_row.rowconfigure(0, weight=1)
+
+        self._info_canvas = tk.Canvas(canvas_row, highlightthickness=0, borderwidth=0)
+        info_scroll = ttk.Scrollbar(canvas_row, orient=tk.VERTICAL, command=self._info_canvas.yview)
+        self._info_canvas.configure(yscrollcommand=info_scroll.set)
+        self._info_canvas.grid(row=0, column=0, sticky=tk.NSEW)
+        info_scroll.grid(row=0, column=1, sticky=tk.NS)
+
+        self._info_grid = ttk.Frame(self._info_canvas)
+        self._info_canvas_window = self._info_canvas.create_window(
+            (0, 0), window=self._info_grid, anchor=tk.NW
+        )
 
         def row(r: int, title: str) -> ttk.Label:
-            ttk.Label(grid, text=title, width=14, anchor=tk.W).grid(row=r, column=0, sticky=tk.NW, pady=1)
-            lbl = ttk.Label(grid, text='—', anchor=tk.W)
+            ttk.Label(self._info_grid, text=title, width=14, anchor=tk.W).grid(
+                row=r, column=0, sticky=tk.NW, pady=1
+            )
+            lbl = ttk.Label(self._info_grid, text='—', anchor=tk.W, style=DATA_LABEL_STYLE)
             lbl.grid(row=r, column=1, sticky=tk.EW, pady=1)
             return lbl
 
@@ -189,24 +291,50 @@ class GenealogyApp:
         self._info_gender = row(2, 'Пол:')
         self._info_birth = row(3, 'Рождение:')
         self._info_death = row(4, 'Смерть:')
+        self._info_value_labels = (
+            self._info_name,
+            self._info_middle,
+            self._info_gender,
+            self._info_birth,
+            self._info_death,
+        )
 
-        ttk.Label(grid, text='Биография:', anchor=tk.NW).grid(row=5, column=0, sticky=tk.NW, pady=(4, 0))
-        self._info_bio = tk.Text(grid, height=4, width=70, wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT)
-        self._info_bio.grid(row=5, column=1, sticky=tk.NSEW, pady=(4, 0))
+        ttk.Label(self._info_grid, text='Биография:', anchor=tk.NW).grid(
+            row=5, column=0, sticky=tk.NW, pady=(4, 0)
+        )
+        self._info_bio = tk.Text(
+            self._info_grid,
+            height=3,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            relief=tk.FLAT,
+            font=self._font_settings.tk_font(),
+        )
+        self._info_bio.grid(row=5, column=1, sticky=tk.EW, pady=(4, 0))
 
-        ttk.Label(grid, text='Связи:', anchor=tk.NW).grid(row=6, column=0, sticky=tk.NW, pady=(4, 0))
-        self._info_rels = tk.Text(grid, height=4, width=70, wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT)
-        self._info_rels.grid(row=6, column=1, sticky=tk.NSEW, pady=(4, 0))
+        ttk.Label(self._info_grid, text='Связи:', anchor=tk.NW).grid(
+            row=6, column=0, sticky=tk.NW, pady=(4, 0)
+        )
+        self._info_rels = tk.Text(
+            self._info_grid,
+            height=3,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            relief=tk.FLAT,
+            font=self._font_settings.tk_font(),
+        )
+        self._info_rels.grid(row=6, column=1, sticky=tk.EW, pady=(4, 0))
 
-        grid.columnconfigure(1, weight=1)
-        grid.rowconfigure(5, weight=1)
-        grid.rowconfigure(6, weight=1)
+        self._info_grid.columnconfigure(1, weight=1)
 
-        middle_frame = ttk.Frame(self.root, padding=10)
-        middle_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self._info_grid.bind('<Configure>', self._on_info_grid_configure)
+        self._info_canvas.bind('<Configure>', self._on_info_canvas_configure)
+        self.root.bind('<Configure>', self._on_root_configure, add='+')
+        self._info_canvas.bind('<Enter>', self._bind_info_mousewheel)
+        self._info_canvas.bind('<Leave>', self._unbind_info_mousewheel)
 
         columns = ('id', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Дата рождения', 'Дата смерти', 'Биография')
-        self.tree = ttk.Treeview(middle_frame, columns=columns, show='headings')
+        self.tree = ttk.Treeview(middle_frame, columns=columns, show='headings', style=DATA_TREE_STYLE)
 
         for col in columns:
             self.tree.heading(col, text=col)
@@ -226,6 +354,84 @@ class GenealogyApp:
 
         self.tree.bind('<Double-1>', lambda e: self._edit_person())
         self.tree.bind('<<TreeviewSelect>>', lambda e: self._show_person_info())
+
+        self.root.after_idle(self._relayout_info_panel)
+
+    def _info_text_height_lines(self) -> int:
+        size = self._font_settings.size
+        if size >= 22:
+            return 2
+        if size >= 16:
+            return 3
+        return 4
+
+    def _info_panel_canvas_height(self) -> int:
+        line_h = self._font_settings.size + 10
+        rows_h = 5 * line_h
+        text_h = 2 * self._info_text_height_lines() * line_h
+        return rows_h + text_h + 28
+
+    def _on_info_grid_configure(self, _event: tk.Event | None = None) -> None:
+        self._info_canvas.configure(scrollregion=self._info_canvas.bbox('all'))
+
+    def _on_info_canvas_configure(self, event: tk.Event) -> None:
+        self._info_canvas.itemconfigure(self._info_canvas_window, width=event.width)
+
+    def _on_root_configure(self, _event: tk.Event | None = None) -> None:
+        self._update_info_wraplengths()
+
+    def _bind_info_mousewheel(self, _event: tk.Event) -> None:
+        self._info_canvas.bind_all('<MouseWheel>', self._on_info_mousewheel)
+        self._info_canvas.bind_all('<Button-4>', self._on_info_mousewheel_linux)
+        self._info_canvas.bind_all('<Button-5>', self._on_info_mousewheel_linux)
+
+    def _unbind_info_mousewheel(self, _event: tk.Event) -> None:
+        self._info_canvas.unbind_all('<MouseWheel>')
+        self._info_canvas.unbind_all('<Button-4>')
+        self._info_canvas.unbind_all('<Button-5>')
+
+    def _on_info_mousewheel(self, event: tk.Event) -> None:
+        self._info_canvas.yview_scroll(int(-event.delta / 120), 'units')
+
+    def _on_info_mousewheel_linux(self, event: tk.Event) -> None:
+        delta = -1 if event.num == 4 else 1
+        self._info_canvas.yview_scroll(delta, 'units')
+
+    def _update_info_wraplengths(self) -> None:
+        if not hasattr(self, '_info_bio'):
+            return
+        wrap = max(120, self._info_bio.winfo_width() - 4)
+        if wrap <= 1:
+            return
+        for lbl in self._info_value_labels:
+            lbl.configure(wraplength=wrap)
+
+    def _relayout_info_panel(self) -> None:
+        text_lines = self._info_text_height_lines()
+        for widget in (self._info_bio, self._info_rels):
+            widget.configure(height=text_lines, font=self._font_settings.tk_font())
+
+        desired = self._info_panel_canvas_height()
+        root_h = self.root.winfo_height()
+        if root_h > 1:
+            max_h = max(140, int(root_h * 0.45))
+            desired = min(desired, max_h)
+
+        self._info_canvas.configure(height=desired)
+        self._on_info_grid_configure()
+        self._update_info_wraplengths()
+
+    def _apply_font_settings(self) -> None:
+        _apply_data_fonts(self._style, self._font_settings)
+        self._relayout_info_panel()
+
+    def _open_settings(self) -> None:
+        dialog = FontSettingsDialog(self.root, self._font_settings)
+        dialog.wait_window()
+        if dialog.result:
+            self._font_settings = dialog.result
+            self._font_settings.save()
+            self._apply_font_settings()
 
     def _set_info_text_widget(self, widget: tk.Text, text: str) -> None:
         widget.configure(state=tk.NORMAL)
@@ -265,7 +471,7 @@ class GenealogyApp:
         return self.db_session.execute(stmt).scalar_one_or_none()
 
     def _add_person(self) -> None:
-        dialog = PersonDialog(self.root, 'Добавить человека')
+        dialog = PersonDialog(self.root, 'Добавить человека', font_settings=self._font_settings)
         dialog.wait_window()
 
         if dialog.result:
@@ -288,7 +494,7 @@ class GenealogyApp:
             messagebox.showwarning('Внимание', 'Выберите человека для редактирования')
             return
 
-        dialog = PersonDialog(self.root, 'Редактировать', person)
+        dialog = PersonDialog(self.root, 'Редактировать', person, font_settings=self._font_settings)
         dialog.wait_window()
         if dialog.result:
             person.first_name = dialog.result.first_name
@@ -339,7 +545,7 @@ class GenealogyApp:
         if not person:
             messagebox.showwarning('Внимание', 'Выберите человека')
             return
-        RelationsDialog(self.root, person, self.db_session)
+        RelationsDialog(self.root, person, self.db_session, font_settings=self._font_settings)
         self.db_session.expire_all()
         self._load_people()
         self._show_person_info()
@@ -368,15 +574,124 @@ class GenealogyApp:
         )
         self._set_info_text_widget(self._info_bio, person.biography or '')
         self._set_info_text_widget(self._info_rels, '\n'.join(rel_lines) if rel_lines else 'Нет связей.')
+        self.root.after_idle(self._on_info_grid_configure)
+        self.root.after_idle(self._update_info_wraplengths)
+
+
+class FontSettingsDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Tk, current: UiFontSettings) -> None:
+        super().__init__(parent)
+        self.title('Настройки шрифта')
+        self.geometry('520x280')
+        self.minsize(480, 260)
+        self.transient(parent)
+        self.grab_set()
+        self.result: UiFontSettings | None = None
+
+        self._current = current
+        self._families = _sorted_font_families(parent)
+
+        body = ttk.Frame(self, padding=12)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(body, text='Шрифт:').grid(row=0, column=0, sticky=tk.W, pady=4)
+        self.family_var = tk.StringVar(value=current.family)
+        family_combo = ttk.Combobox(
+            body,
+            textvariable=self.family_var,
+            values=self._families,
+            width=36,
+        )
+        family_combo.grid(row=0, column=1, sticky=tk.EW, pady=4, padx=(8, 0))
+
+        ttk.Label(body, text='Размер:').grid(row=1, column=0, sticky=tk.W, pady=4)
+        size_row = ttk.Frame(body)
+        size_row.grid(row=1, column=1, sticky=tk.W, pady=4, padx=(8, 0))
+        self.size_var = tk.IntVar(value=current.size)
+        ttk.Spinbox(
+            size_row,
+            from_=MIN_FONT_SIZE,
+            to=MAX_FONT_SIZE,
+            textvariable=self.size_var,
+            width=6,
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            size_row,
+            text=f'({MIN_FONT_SIZE}–{MAX_FONT_SIZE} пт)',
+            foreground='gray',
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        preview_shell = ttk.LabelFrame(body, text='Предпросмотр', padding=10)
+        preview_shell.grid(row=2, column=0, columnspan=2, sticky=tk.EW, pady=(12, 8))
+        self._preview_label = ttk.Label(
+            preview_shell,
+            text='Семейное древо — Иванов Иван Иванович',
+            anchor=tk.W,
+        )
+        self._preview_label.pack(fill=tk.X)
+
+        btn_row = ttk.Frame(body)
+        btn_row.grid(row=3, column=0, columnspan=2, sticky=tk.E, pady=(8, 0))
+        ttk.Button(btn_row, text='Сбросить', command=self._reset_defaults).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_row, text='Отмена', command=self._on_cancel).pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_row, text='Применить', command=self._on_apply).pack(side=tk.LEFT, padx=4)
+
+        body.columnconfigure(1, weight=1)
+        self.family_var.trace_add('write', lambda *_: self._update_preview())
+        self.size_var.trace_add('write', lambda *_: self._update_preview())
+        self._update_preview()
+        self.protocol('WM_DELETE_WINDOW', self._on_cancel)
+
+    def _preview_settings(self) -> UiFontSettings | None:
+        try:
+            size = int(self.size_var.get())
+        except (tk.TclError, ValueError):
+            return None
+        family = self.family_var.get().strip()
+        if not family:
+            return None
+        size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, size))
+        return UiFontSettings(family=_resolve_font_family(self, family), size=size)
+
+    def _update_preview(self) -> None:
+        preview = self._preview_settings()
+        if preview:
+            self._preview_label.configure(font=preview.tk_font())
+
+    def _reset_defaults(self) -> None:
+        defaults = UiFontSettings.defaults(self)
+        self.family_var.set(defaults.family)
+        self.size_var.set(defaults.size)
+
+    def _on_apply(self) -> None:
+        preview = self._preview_settings()
+        if not preview:
+            messagebox.showerror('Ошибка', 'Укажите корректный шрифт и размер', parent=self)
+            return
+        self.result = preview
+        self.grab_release()
+        self.destroy()
+
+    def _on_cancel(self) -> None:
+        self.grab_release()
+        self.destroy()
 
 
 class PersonDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, title: str, person: Person | None = None) -> None:
+    def __init__(
+        self,
+        parent: tk.Tk,
+        title: str,
+        person: Person | None = None,
+        *,
+        font_settings: UiFontSettings | None = None,
+    ) -> None:
         super().__init__(parent)
         self.title(title)
         self.geometry('420x520')
         self.transient(parent)
         self.result: PersonData | None = None
+        self._font_settings = font_settings or UiFontSettings.load(parent)
 
         self._create_widgets(person)
 
@@ -395,14 +710,14 @@ class PersonDialog(tk.Toplevel):
 
         ttk.Label(self, text='Пол:').pack(pady=(8, 0))
         if person and person.gender:
-            gender_value = person.gender.value if isinstance(person.gender, Gender) else str(person.gender)
+            gender_label = _gender_display_raw(person.gender)
         else:
-            gender_value = Gender.MALE.value
-        self.gender_var = tk.StringVar(value=gender_value)
+            gender_label = GENDER_LABELS_RU[Gender.MALE.value]
+        self.gender_var = tk.StringVar(value=gender_label)
         ttk.Combobox(
             self,
             textvariable=self.gender_var,
-            values=[Gender.MALE.value, Gender.FEMALE.value, Gender.OTHER.value],
+            values=GENDER_COMBO_LABELS,
             state='readonly',
             width=12,
         ).pack()
@@ -420,7 +735,13 @@ class PersonDialog(tk.Toplevel):
         ttk.Label(self, text='Биография:').pack(pady=(8, 0))
         bio_frame = ttk.Frame(self)
         bio_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 8))
-        self.biography_text = tk.Text(bio_frame, height=6, width=40, wrap=tk.WORD)
+        self.biography_text = tk.Text(
+            bio_frame,
+            height=6,
+            width=40,
+            wrap=tk.WORD,
+            font=self._font_settings.tk_font(),
+        )
         self.biography_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb = ttk.Scrollbar(bio_frame, command=self.biography_text.yview)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -448,12 +769,12 @@ class PersonDialog(tk.Toplevel):
         if death is False:
             return
 
-        gender_value = self.gender_var.get()
-        try:
-            gender = Gender(gender_value) if gender_value else Gender.MALE
-        except ValueError:
-            messagebox.showerror('Ошибка', 'Некорректное значение пола')
+        gender_label = self.gender_var.get().strip()
+        gender_key = GENDER_RU_TO_KEY.get(gender_label)
+        if not gender_key:
+            messagebox.showerror('Ошибка', 'Выберите пол из списка')
             return
+        gender = Gender(gender_key)
 
         self.result = PersonData(
             first_name=first_name,
@@ -479,7 +800,14 @@ class PersonDialog(tk.Toplevel):
 
 
 class RelationsDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, person: Person, session: Session) -> None:
+    def __init__(
+        self,
+        parent: tk.Tk,
+        person: Person,
+        session: Session,
+        *,
+        font_settings: UiFontSettings | None = None,
+    ) -> None:
         super().__init__(parent)
         self.title(f'Связи — {person.last_name} {person.first_name}')
         self.geometry('720x560')
@@ -489,6 +817,7 @@ class RelationsDialog(tk.Toplevel):
 
         self.person = person
         self.db_session = session
+        self._font_settings = font_settings or UiFontSettings.load(parent)
         self._edge_rows: list[tuple[Relationship, Person, str]] = []
 
         self._create_widgets()
@@ -514,7 +843,12 @@ class RelationsDialog(tk.Toplevel):
 
         cols = ('Фамилия', 'Имя', 'Отчество')
         self.candidates_tree = ttk.Treeview(
-            lf_pick, columns=cols, show='headings', height=10, selectmode='browse'
+            lf_pick,
+            columns=cols,
+            show='headings',
+            height=10,
+            selectmode='browse',
+            style=DATA_TREE_STYLE,
         )
         for c, w in zip(cols, (160, 120, 130)):
             self.candidates_tree.heading(c, text=c)
@@ -555,7 +889,13 @@ class RelationsDialog(tk.Toplevel):
         lf_list = ttk.LabelFrame(self, text='3. Все связи (в том числе обратные)', padding=8)
         lf_list.pack(fill=tk.BOTH, expand=True, padx=10, pady=(8, 4))
 
-        self.rel_listbox = tk.Listbox(lf_list, height=9, width=80, exportselection=False)
+        self.rel_listbox = tk.Listbox(
+            lf_list,
+            height=9,
+            width=80,
+            exportselection=False,
+            font=self._font_settings.tk_font(),
+        )
         rs = ttk.Scrollbar(lf_list, orient=tk.VERTICAL, command=self.rel_listbox.yview)
         self.rel_listbox.configure(yscrollcommand=rs.set)
         self.rel_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)

@@ -54,6 +54,10 @@ class Base(DeclarativeBase):
 
 # (таблица, колонка, тип SQLite) — добавляются при обновлении старой БД без потери данных.
 _SQLITE_COLUMN_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    ('persons', 'place_of_birth', 'VARCHAR(255)'),
+    ('persons', 'place_of_death', 'VARCHAR(255)'),
+    ('persons', 'death_cause', 'VARCHAR(20)'),
+    ('persons', 'archive_records', 'TEXT'),
     ('phones', 'created_at', 'DATETIME'),
     ('phones', 'updated_at', 'DATETIME'),
     ('addresses', 'created_at', 'DATETIME'),

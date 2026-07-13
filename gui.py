@@ -10,12 +10,50 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from database import DATA_DIR, SessionLocal, init_db
-from models import Address, Gender, Person, Phone, Relationship
+from models import Address, DeathCause, Gender, Person, Phone, Relationship
 
 UI_SETTINGS_PATH = DATA_DIR / 'ui_settings.json'
 MIN_FONT_SIZE = 8
 MAX_FONT_SIZE = 28
 INFO_CONTACT_MAX_LINES = 5
+
+# Ограничения размеров окон (подстраиваются под экран пользователя).
+WIN_MIN_WIDTH = 360
+WIN_MIN_HEIGHT = 240
+WIN_MAX_WIDTH_RATIO = 0.96
+WIN_MAX_HEIGHT_RATIO = 0.92
+
+
+def _screen_size(widget: tk.Misc) -> tuple[int, int]:
+    widget.update_idletasks()
+    return widget.winfo_screenwidth(), widget.winfo_screenheight()
+
+
+def _apply_window_geometry(
+    window: tk.Misc,
+    width: int,
+    height: int,
+    *,
+    min_width: int = WIN_MIN_WIDTH,
+    min_height: int = WIN_MIN_HEIGHT,
+    max_width_ratio: float = WIN_MAX_WIDTH_RATIO,
+    max_height_ratio: float = WIN_MAX_HEIGHT_RATIO,
+    center: bool = True,
+) -> tuple[int, int]:
+    """Подогнать размер окна под экран; minsize — мягкий, пользователь может уменьшать."""
+    sw, sh = _screen_size(window)
+    max_w = max(min_width, int(sw * max_width_ratio))
+    max_h = max(min_height, int(sh * max_height_ratio))
+    w = max(min_width, min(width, max_w))
+    h = max(min_height, min(height, max_h))
+    window.minsize(min_width, min_height)
+    if center:
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        window.geometry(f'{w}x{h}+{x}+{y}')
+    else:
+        window.geometry(f'{w}x{h}')
+    return w, h
 
 
 @dataclass
@@ -88,7 +126,11 @@ class PersonData:
     gender: Gender
     date_of_birth: date | None
     date_of_death: date | None
+    place_of_birth: str | None
+    place_of_death: str | None
+    death_cause: DeathCause | None
     biography: str | None
+    archive_records: str | None
     phones: list[str]
     addresses: list[str]
 
@@ -125,6 +167,138 @@ GENDER_LABELS_RU: dict[str, str] = {
 GENDER_COMBO_LABELS: list[str] = list(GENDER_LABELS_RU.values())
 GENDER_RU_TO_KEY: dict[str, str] = {label: key for key, label in GENDER_LABELS_RU.items()}
 
+DEATH_CAUSE_LABELS_RU: dict[str, str] = {
+    DeathCause.NATURAL.value: 'Естественная',
+    DeathCause.ILLNESS.value: 'По болезни',
+    DeathCause.OTHER.value: 'Другое',
+    DeathCause.UNKNOWN.value: 'Неизвестно',
+}
+DEATH_CAUSE_COMBO_LABELS: list[str] = list(DEATH_CAUSE_LABELS_RU.values())
+DEATH_CAUSE_RU_TO_KEY: dict[str, str] = {
+    label: key for key, label in DEATH_CAUSE_LABELS_RU.items()
+}
+
+
+DATE_ENTRY_FMT = '%d-%m-%Y'
+DATE_ENTRY_HINT = 'ДД-ММ-ГГГГ'
+
+MONTH_NAMES_RU_GENITIVE: tuple[str, ...] = (
+    '',
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+)
+
+
+def format_date_display(value: date | None, *, empty: str = '—') -> str:
+    if value is None:
+        return empty
+    return f'{value.day} {MONTH_NAMES_RU_GENITIVE[value.month]} {value.year} г.'
+
+
+def format_date_entry(value: date | None) -> str:
+    if value is None:
+        return ''
+    return value.strftime(DATE_ENTRY_FMT)
+
+
+def _mask_date_digits(digits: str) -> str:
+    digits = digits[:8]
+    if len(digits) <= 2:
+        return digits
+    if len(digits) <= 4:
+        return f'{digits[:2]}-{digits[2:]}'
+    return f'{digits[:2]}-{digits[2:4]}-{digits[4:]}'
+
+
+def _try_parse_date_flexible(value: str) -> date | None:
+    text = value.strip()
+    if not text:
+        return None
+    for fmt in ('%d-%m-%Y', '%d.%m.%Y', '%Y-%m-%d', '%Y.%m.%d'):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    digits = ''.join(ch for ch in text if ch.isdigit())
+    if len(digits) == 8:
+        for fmt in ('%d%m%Y', '%Y%m%d'):
+            try:
+                return datetime.strptime(digits, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def parse_date_entry(date_str: str, field_label: str) -> date | None | bool:
+    """date | None — ок; False — ошибка показана."""
+    if not date_str.strip():
+        return None
+    parsed = _try_parse_date_flexible(date_str)
+    if parsed is None:
+        messagebox.showerror('Ошибка', f'Некорректная {field_label}. Формат: {DATE_ENTRY_HINT}')
+        return False
+    return parsed
+
+
+class DateMaskEntry(ttk.Entry):
+    """Поле даты: ввод цифр, автоматически ДД-ММ-ГГГГ."""
+
+    def __init__(self, parent: tk.Misc, textvariable: tk.StringVar | None = None, **kwargs) -> None:
+        self._date_var = textvariable or tk.StringVar()
+        super().__init__(parent, textvariable=self._date_var, width=kwargs.pop('width', 14), **kwargs)
+        self._updating = False
+        self.bind('<KeyRelease>', self._on_key_release)
+        self.bind('<FocusOut>', self._on_focus_out)
+
+    def _on_key_release(self, _event: tk.Event) -> None:
+        if self._updating:
+            return
+        raw = self._date_var.get()
+        parsed = _try_parse_date_flexible(raw)
+        if parsed is not None and len(''.join(ch for ch in raw if ch.isdigit())) >= 8:
+            formatted = format_date_entry(parsed)
+        else:
+            digits = ''.join(ch for ch in raw if ch.isdigit())[:8]
+            formatted = _mask_date_digits(digits)
+        if formatted == raw:
+            return
+        self._updating = True
+        self._date_var.set(formatted)
+        cursor = self._cursor_for_digits(min(8, len(''.join(ch for ch in formatted if ch.isdigit()))))
+        self.icursor(cursor)
+        self._updating = False
+
+    def _on_focus_out(self, _event: tk.Event) -> None:
+        raw = self._date_var.get().strip()
+        if not raw:
+            return
+        parsed = _try_parse_date_flexible(raw)
+        if parsed is None:
+            return
+        formatted = format_date_entry(parsed)
+        if formatted != raw:
+            self._updating = True
+            self._date_var.set(formatted)
+            self._updating = False
+
+    @staticmethod
+    def _cursor_for_digits(digit_count: int) -> int:
+        if digit_count <= 2:
+            return digit_count
+        if digit_count <= 4:
+            return digit_count + 1
+        return digit_count + 2
+
 
 def _gender_key(gender: Gender | str | None) -> str:
     if gender is None:
@@ -138,6 +312,20 @@ def _gender_display_raw(gender: Gender | str | None) -> str:
     if gender is None:
         return '-'
     return GENDER_LABELS_RU.get(_gender_key(gender), _gender_key(gender) or '-')
+
+
+def _death_cause_key(cause: DeathCause | str | None) -> str:
+    if cause is None:
+        return ''
+    if isinstance(cause, DeathCause):
+        return cause.value
+    return str(cause).strip().lower()
+
+
+def _death_cause_display_raw(cause: DeathCause | str | None) -> str:
+    if cause is None:
+        return '—'
+    return DEATH_CAUSE_LABELS_RU.get(_death_cause_key(cause), _death_cause_key(cause) or '—')
 
 
 # Семантика записи Relationship:
@@ -252,8 +440,14 @@ class GenealogyApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title('Семейное древо')
-        self.root.geometry('1200x800')
-        self.root.minsize(900, 600)
+        sw, sh = _screen_size(root)
+        _apply_window_geometry(
+            root,
+            min(1200, int(sw * 0.9)),
+            min(800, int(sh * 0.85)),
+            min_width=640,
+            min_height=480,
+        )
 
         self.db_session = SessionLocal()
         self._font_settings = UiFontSettings.load(root)
@@ -318,17 +512,23 @@ class GenealogyApp:
         self._info_middle = row(1, 'Отчество:')
         self._info_gender = row(2, 'Пол:')
         self._info_birth = row(3, 'Рождение:')
-        self._info_death = row(4, 'Смерть:')
+        self._info_birth_place = row(4, 'Место рожд.:')
+        self._info_death = row(5, 'Смерть:')
+        self._info_death_place = row(6, 'Место смерти:')
+        self._info_death_cause = row(7, 'Причина смерти:')
         self._info_value_labels = (
             self._info_name,
             self._info_middle,
             self._info_gender,
             self._info_birth,
+            self._info_birth_place,
             self._info_death,
+            self._info_death_place,
+            self._info_death_cause,
         )
 
         ttk.Label(self._info_grid, text='Телефоны:', anchor=tk.NW).grid(
-            row=5, column=0, sticky=tk.NW, pady=(4, 0)
+            row=8, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_phones = tk.Text(
             self._info_grid,
@@ -338,10 +538,10 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_phones.grid(row=5, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_phones.grid(row=8, column=1, sticky=tk.EW, pady=(4, 0))
 
         ttk.Label(self._info_grid, text='Адреса:', anchor=tk.NW).grid(
-            row=6, column=0, sticky=tk.NW, pady=(4, 0)
+            row=9, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_addresses = tk.Text(
             self._info_grid,
@@ -351,10 +551,10 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_addresses.grid(row=6, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_addresses.grid(row=9, column=1, sticky=tk.EW, pady=(4, 0))
 
         ttk.Label(self._info_grid, text='Биография:', anchor=tk.NW).grid(
-            row=7, column=0, sticky=tk.NW, pady=(4, 0)
+            row=10, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_bio = tk.Text(
             self._info_grid,
@@ -364,10 +564,23 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_bio.grid(row=7, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_bio.grid(row=10, column=1, sticky=tk.EW, pady=(4, 0))
+
+        ttk.Label(self._info_grid, text='Архивные записи:', anchor=tk.NW).grid(
+            row=11, column=0, sticky=tk.NW, pady=(4, 0)
+        )
+        self._info_archive = tk.Text(
+            self._info_grid,
+            height=3,
+            wrap=tk.WORD,
+            state=tk.DISABLED,
+            relief=tk.FLAT,
+            font=self._font_settings.tk_font(),
+        )
+        self._info_archive.grid(row=11, column=1, sticky=tk.EW, pady=(4, 0))
 
         ttk.Label(self._info_grid, text='Связи:', anchor=tk.NW).grid(
-            row=8, column=0, sticky=tk.NW, pady=(4, 0)
+            row=12, column=0, sticky=tk.NW, pady=(4, 0)
         )
         self._info_rels = tk.Text(
             self._info_grid,
@@ -377,7 +590,7 @@ class GenealogyApp:
             relief=tk.FLAT,
             font=self._font_settings.tk_font(),
         )
-        self._info_rels.grid(row=8, column=1, sticky=tk.EW, pady=(4, 0))
+        self._info_rels.grid(row=12, column=1, sticky=tk.EW, pady=(4, 0))
 
         self._info_grid.columnconfigure(1, weight=1)
 
@@ -401,6 +614,8 @@ class GenealogyApp:
         self.tree.column('Имя', width=120)
         self.tree.column('Фамилия', width=150)
         self.tree.column('Отчество', width=150)
+        self.tree.column('Дата рождения', width=165)
+        self.tree.column('Дата смерти', width=165)
         self.tree.column('Биография', width=200)
 
         scrollbar = ttk.Scrollbar(middle_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -430,11 +645,11 @@ class GenealogyApp:
 
     def _info_panel_canvas_height(self) -> int:
         line_h = self._font_settings.size + 10
-        rows_h = 5 * line_h
+        rows_h = 8 * line_h
         phone_lines = self._info_phone_line_count
         address_lines = self._info_address_line_count
         text_lines = self._info_text_height_lines()
-        text_h = (phone_lines + address_lines + 2 * text_lines) * line_h
+        text_h = (phone_lines + address_lines + 3 * text_lines) * line_h
         return rows_h + text_h + 28
 
     def _on_info_grid_configure(self, _event: tk.Event | None = None) -> None:
@@ -477,7 +692,7 @@ class GenealogyApp:
         font = self._font_settings.tk_font()
         self._info_phones.configure(height=self._info_phone_line_count, font=font)
         self._info_addresses.configure(height=self._info_address_line_count, font=font)
-        for widget in (self._info_bio, self._info_rels):
+        for widget in (self._info_bio, self._info_archive, self._info_rels):
             widget.configure(height=text_lines, font=font)
 
         desired = self._info_panel_canvas_height()
@@ -523,8 +738,8 @@ class GenealogyApp:
                 person.first_name,
                 person.middle_name or '',
                 gender_str,
-                person.date_of_birth.strftime('%Y-%m-%d') if person.date_of_birth else '-',
-                person.date_of_death.strftime('%Y-%m-%d') if person.date_of_death else '-',
+                format_date_display(person.date_of_birth, empty='-'),
+                format_date_display(person.date_of_death, empty='-'),
                 (person.biography or '')[:80] + ('…' if person.biography and len(person.biography) > 80 else ''),
             ))
 
@@ -551,7 +766,11 @@ class GenealogyApp:
                 gender=dialog.result.gender,
                 date_of_birth=dialog.result.date_of_birth,
                 date_of_death=dialog.result.date_of_death,
+                place_of_birth=dialog.result.place_of_birth,
+                place_of_death=dialog.result.place_of_death,
+                death_cause=dialog.result.death_cause,
                 biography=dialog.result.biography,
+                archive_records=dialog.result.archive_records,
             )
             self.db_session.add(person)
             self.db_session.flush()
@@ -586,7 +805,11 @@ class GenealogyApp:
             person.gender = dialog.result.gender
             person.date_of_birth = dialog.result.date_of_birth
             person.date_of_death = dialog.result.date_of_death
+            person.place_of_birth = dialog.result.place_of_birth
+            person.place_of_death = dialog.result.place_of_death
+            person.death_cause = dialog.result.death_cause
             person.biography = dialog.result.biography
+            person.archive_records = dialog.result.archive_records
             _save_person_contacts(
                 self.db_session,
                 person.id,
@@ -625,8 +848,12 @@ class GenealogyApp:
         self._info_middle.config(text='—')
         self._info_gender.config(text='—')
         self._info_birth.config(text='—')
+        self._info_birth_place.config(text='—')
         self._info_death.config(text='—')
+        self._info_death_place.config(text='—')
+        self._info_death_cause.config(text='—')
         self._set_info_text_widget(self._info_bio, '')
+        self._set_info_text_widget(self._info_archive, '')
         self._set_info_text_widget(self._info_rels, 'Выберите человека в таблице.')
         self._set_info_text_widget(self._info_phones, '')
         self._set_info_text_widget(self._info_addresses, '')
@@ -665,13 +892,17 @@ class GenealogyApp:
         self._info_name.config(text=fio)
         self._info_middle.config(text=person.middle_name or '—')
         self._info_gender.config(text=_gender_display_raw(person.gender))
-        self._info_birth.config(
-            text=person.date_of_birth.strftime('%Y-%m-%d') if person.date_of_birth else '—'
-        )
-        self._info_death.config(
-            text=person.date_of_death.strftime('%Y-%m-%d') if person.date_of_death else '—'
-        )
+        self._info_birth.config(text=format_date_display(person.date_of_birth))
+        self._info_birth_place.config(text=person.place_of_birth or '—')
+        self._info_death.config(text=format_date_display(person.date_of_death))
+        if person.date_of_death:
+            self._info_death_place.config(text=person.place_of_death or '—')
+            self._info_death_cause.config(text=_death_cause_display_raw(person.death_cause))
+        else:
+            self._info_death_place.config(text='—')
+            self._info_death_cause.config(text='—')
         self._set_info_text_widget(self._info_bio, person.biography or '')
+        self._set_info_text_widget(self._info_archive, person.archive_records or '')
         self._set_info_text_widget(
             self._info_phones,
             '\n'.join(phones) if phones else '—',
@@ -688,8 +919,6 @@ class FontSettingsDialog(tk.Toplevel):
     def __init__(self, parent: tk.Tk, current: UiFontSettings) -> None:
         super().__init__(parent)
         self.title('Настройки шрифта')
-        self.geometry('520x280')
-        self.minsize(480, 260)
         self.transient(parent)
         self.grab_set()
         self.result: UiFontSettings | None = None
@@ -747,6 +976,9 @@ class FontSettingsDialog(tk.Toplevel):
         self.size_var.trace_add('write', lambda *_: self._update_preview())
         self._update_preview()
         self.protocol('WM_DELETE_WINDOW', self._on_cancel)
+        self.after_idle(
+            lambda: _apply_window_geometry(self, 520, 300, min_width=400, min_height=260)
+        )
 
     def _preview_settings(self) -> UiFontSettings | None:
         try:
@@ -927,22 +1159,21 @@ class PersonDialog(tk.Toplevel):
         btn_h = self._btn_frame.winfo_reqheight()
         vertical_pad = 42
         total_h = form_h + btn_h + vertical_pad
-        max_h = int(self.winfo_screenheight() * 0.92)
+        _, sh = _screen_size(self)
+        max_h = int(sh * WIN_MAX_HEIGHT_RATIO)
         width = max(460, min(560, self.winfo_reqwidth() + 24))
 
         if total_h <= max_h:
             self._scroll_visible = False
             self._vscroll.grid_remove()
             self._canvas.configure(height=form_h)
-            self.geometry(f'{width}x{total_h}')
-            self.minsize(420, min(total_h, max_h))
+            _apply_window_geometry(self, width, total_h, min_width=400, min_height=280)
         else:
             self._scroll_visible = True
-            canvas_h = max(280, max_h - btn_h - vertical_pad)
+            canvas_h = max(200, max_h - btn_h - vertical_pad)
             self._canvas.configure(height=canvas_h)
             self._vscroll.grid(row=0, column=1, sticky=tk.NS)
-            self.geometry(f'{width}x{max_h}')
-            self.minsize(420, 360)
+            _apply_window_geometry(self, width, max_h, min_width=400, min_height=280)
 
         self._on_form_configure()
 
@@ -999,15 +1230,41 @@ class PersonDialog(tk.Toplevel):
             width=12,
         ).pack(anchor=tk.W)
 
-        ttk.Label(form, text='Дата рождения (ГГГГ-ММ-ДД):').pack(anchor=tk.W, pady=(8, 0))
-        birth_date_str = person.date_of_birth.strftime('%Y-%m-%d') if person and person.date_of_birth else ''
-        self.birth_date_var = tk.StringVar(value=birth_date_str)
-        ttk.Entry(form, textvariable=self.birth_date_var, width=40).pack(fill=tk.X)
+        ttk.Label(form, text=f'Дата рождения ({DATE_ENTRY_HINT}):').pack(anchor=tk.W, pady=(8, 0))
+        self.birth_date_var = tk.StringVar(
+            value=format_date_entry(person.date_of_birth) if person and person.date_of_birth else ''
+        )
+        DateMaskEntry(form, textvariable=self.birth_date_var).pack(fill=tk.X)
 
-        ttk.Label(form, text='Дата смерти (опционально):').pack(anchor=tk.W, pady=(8, 0))
-        death_date_str = person.date_of_death.strftime('%Y-%m-%d') if person and person.date_of_death else ''
-        self.death_date_var = tk.StringVar(value=death_date_str)
-        ttk.Entry(form, textvariable=self.death_date_var, width=40).pack(fill=tk.X)
+        ttk.Label(form, text='Место рождения:').pack(anchor=tk.W, pady=(8, 0))
+        self.place_of_birth_var = tk.StringVar(value=person.place_of_birth or '' if person else '')
+        ttk.Entry(form, textvariable=self.place_of_birth_var, width=40).pack(fill=tk.X)
+
+        ttk.Label(form, text=f'Дата смерти ({DATE_ENTRY_HINT}, опционально):').pack(anchor=tk.W, pady=(8, 0))
+        self.death_date_var = tk.StringVar(
+            value=format_date_entry(person.date_of_death) if person and person.date_of_death else ''
+        )
+        self._death_date_entry = DateMaskEntry(form, textvariable=self.death_date_var)
+        self._death_date_entry.pack(fill=tk.X)
+
+        self._death_details = ttk.Frame(form)
+        ttk.Label(self._death_details, text='Место смерти:').pack(anchor=tk.W)
+        self.place_of_death_var = tk.StringVar(value=person.place_of_death or '' if person else '')
+        ttk.Entry(self._death_details, textvariable=self.place_of_death_var, width=40).pack(fill=tk.X)
+
+        ttk.Label(self._death_details, text='Причина смерти:').pack(anchor=tk.W, pady=(8, 0))
+        if person and person.death_cause:
+            death_cause_label = _death_cause_display_raw(person.death_cause)
+        else:
+            death_cause_label = DEATH_CAUSE_LABELS_RU[DeathCause.UNKNOWN.value]
+        self.death_cause_var = tk.StringVar(value=death_cause_label)
+        ttk.Combobox(
+            self._death_details,
+            textvariable=self.death_cause_var,
+            values=DEATH_CAUSE_COMBO_LABELS,
+            state='readonly',
+            width=24,
+        ).pack(anchor=tk.W)
 
         self._phones_panel = MultiValuePanel(
             form,
@@ -1027,6 +1284,22 @@ class PersonDialog(tk.Toplevel):
         )
         self._addresses_panel.pack(fill=tk.X, pady=(4, 0))
 
+        ttk.Label(form, text='Архивные записи:').pack(anchor=tk.W, pady=(8, 0))
+        archive_frame = ttk.Frame(form)
+        archive_frame.pack(fill=tk.X, pady=(0, 4))
+        self.archive_text = tk.Text(
+            archive_frame,
+            height=3,
+            wrap=tk.WORD,
+            font=self._font_settings.tk_font(),
+        )
+        self.archive_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        archive_sb = ttk.Scrollbar(archive_frame, command=self.archive_text.yview)
+        archive_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.archive_text.configure(yscrollcommand=archive_sb.set)
+        if person and person.archive_records:
+            self.archive_text.insert('1.0', person.archive_records)
+
         ttk.Label(form, text='Биография:').pack(anchor=tk.W, pady=(8, 0))
         bio_frame = ttk.Frame(form)
         bio_frame.pack(fill=tk.X, pady=(0, 4))
@@ -1043,10 +1316,24 @@ class PersonDialog(tk.Toplevel):
         if person and person.biography:
             self.biography_text.insert('1.0', person.biography)
 
+        self.death_date_var.trace_add('write', self._update_death_details_visibility)
+        self._update_death_details_visibility()
+
         self._btn_frame = ttk.Frame(self)
         self._btn_frame.grid(row=1, column=0, pady=(8, 10))
         ttk.Button(self._btn_frame, text='OK', command=self._on_ok).pack(side=tk.LEFT, padx=10)
         ttk.Button(self._btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=10)
+
+    def _has_complete_death_date(self) -> bool:
+        return _try_parse_date_flexible(self.death_date_var.get()) is not None
+
+    def _update_death_details_visibility(self, *_args: object) -> None:
+        if self._has_complete_death_date():
+            if not self._death_details.winfo_ismapped():
+                self._death_details.pack(fill=tk.X, pady=(8, 0), before=self._phones_panel)
+        elif self._death_details.winfo_ismapped():
+            self._death_details.pack_forget()
+        self._schedule_fit()
 
     def _on_ok(self) -> None:
         first_name = self.first_name_var.get().strip()
@@ -1056,10 +1343,10 @@ class PersonDialog(tk.Toplevel):
             messagebox.showerror('Ошибка', 'Имя и фамилия обязательны')
             return
 
-        birth = self._parse_date(self.birth_date_var.get(), 'дата рождения')
+        birth = parse_date_entry(self.birth_date_var.get(), 'дата рождения')
         if birth is False:
             return
-        death = self._parse_date(self.death_date_var.get(), 'дата смерти')
+        death = parse_date_entry(self.death_date_var.get(), 'дата смерти')
         if death is False:
             return
 
@@ -1070,6 +1357,18 @@ class PersonDialog(tk.Toplevel):
             return
         gender = Gender(gender_key)
 
+        if death is None:
+            place_of_death = None
+            death_cause = None
+        else:
+            place_of_death = self.place_of_death_var.get().strip() or None
+            cause_label = self.death_cause_var.get().strip()
+            cause_key = DEATH_CAUSE_RU_TO_KEY.get(cause_label)
+            if not cause_key:
+                messagebox.showerror('Ошибка', 'Выберите причину смерти из списка')
+                return
+            death_cause = DeathCause(cause_key)
+
         self.result = PersonData(
             first_name=first_name,
             last_name=last_name,
@@ -1077,22 +1376,15 @@ class PersonDialog(tk.Toplevel):
             gender=gender,
             date_of_birth=birth,
             date_of_death=death,
+            place_of_birth=self.place_of_birth_var.get().strip() or None,
+            place_of_death=place_of_death,
+            death_cause=death_cause,
             biography=self.biography_text.get('1.0', tk.END).strip() or None,
+            archive_records=self.archive_text.get('1.0', tk.END).strip() or None,
             phones=self._phones_panel.get_values(),
             addresses=self._addresses_panel.get_values(),
         )
         self.destroy()
-
-    @staticmethod
-    def _parse_date(date_str: str, field_label: str) -> date | None | bool:
-        """date | None — ок; False — ошибка показана."""
-        if not date_str.strip():
-            return None
-        try:
-            return datetime.strptime(date_str.strip(), '%Y-%m-%d').date()
-        except ValueError:
-            messagebox.showerror('Ошибка', f'Некорректная {field_label}. Формат: ГГГГ-ММ-ДД')
-            return False
 
 
 class RelationsDialog(tk.Toplevel):
@@ -1106,8 +1398,6 @@ class RelationsDialog(tk.Toplevel):
     ) -> None:
         super().__init__(parent)
         self.title(f'Связи — {person.last_name} {person.first_name}')
-        self.geometry('720x560')
-        self.minsize(520, 750)
         self.transient(parent)
         self.grab_set()
 
@@ -1116,33 +1406,59 @@ class RelationsDialog(tk.Toplevel):
         self._font_settings = font_settings or UiFontSettings.load(parent)
         self._edge_rows: list[tuple[Relationship, Person, str]] = []
 
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
         self._create_widgets()
         self._reload_candidates()
         self._update_rel_listbox()
 
         self.protocol('WM_DELETE_WINDOW', self._on_close)
+        self.after_idle(self._fit_window)
+
+    def _fit_window(self) -> None:
+        sw, sh = _screen_size(self)
+        _apply_window_geometry(
+            self,
+            min(720, int(sw * 0.85)),
+            min(620, int(sh * 0.82)),
+            min_width=480,
+            min_height=360,
+        )
+
+    def _on_window_configure(self, event: tk.Event) -> None:
+        if event.widget is self and hasattr(self, '_hint_label'):
+            self._hint_label.configure(wraplength=max(160, event.width - 48))
 
     def _on_close(self) -> None:
         self.grab_release()
         self.destroy()
 
     def _create_widgets(self) -> None:
+        main = ttk.Frame(self, padding=(10, 10, 10, 0))
+        main.grid(row=0, column=0, sticky=tk.NSEW)
+        main.grid_columnconfigure(0, weight=1)
+        main.grid_rowconfigure(1, weight=2)
+        main.grid_rowconfigure(3, weight=1)
+
         head = ttk.Label(
-            self,
+            main,
             text=f'Связи для: {self.person.last_name} {self.person.first_name}',
             font=('TkDefaultFont', 10, 'bold'),
         )
-        head.pack(pady=(10, 4), padx=10, anchor=tk.W)
+        head.grid(row=0, column=0, sticky=tk.W, pady=(0, 6))
 
-        lf_pick = ttk.LabelFrame(self, text='1. Выберите человека в списке (мышью)', padding=8)
-        lf_pick.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 6))
+        lf_pick = ttk.LabelFrame(main, text='1. Выберите человека в списке (мышью)', padding=8)
+        lf_pick.grid(row=1, column=0, sticky=tk.NSEW, pady=(0, 6))
+        lf_pick.grid_columnconfigure(0, weight=1)
+        lf_pick.grid_rowconfigure(0, weight=1)
 
         cols = ('Фамилия', 'Имя', 'Отчество')
         self.candidates_tree = ttk.Treeview(
             lf_pick,
             columns=cols,
             show='headings',
-            height=10,
+            height=5,
             selectmode='browse',
             style=DATA_TREE_STYLE,
         )
@@ -1152,13 +1468,13 @@ class RelationsDialog(tk.Toplevel):
 
         cs = ttk.Scrollbar(lf_pick, orient=tk.VERTICAL, command=self.candidates_tree.yview)
         self.candidates_tree.configure(yscrollcommand=cs.set)
-        self.candidates_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        cs.pack(side=tk.RIGHT, fill=tk.Y)
+        self.candidates_tree.grid(row=0, column=0, sticky=tk.NSEW)
+        cs.grid(row=0, column=1, sticky=tk.NS)
 
         self.candidates_tree.bind('<Double-1>', lambda e: self._add_relationship())
 
-        lf_add = ttk.LabelFrame(self, text='2. Тип связи и добавление', padding=8)
-        lf_add.pack(fill=tk.X, padx=10, pady=0)
+        lf_add = ttk.LabelFrame(main, text='2. Тип связи и добавление', padding=8)
+        lf_add.grid(row=2, column=0, sticky=tk.EW, pady=(0, 6))
 
         add_row = ttk.Frame(lf_add)
         add_row.pack(fill=tk.X)
@@ -1180,25 +1496,27 @@ class RelationsDialog(tk.Toplevel):
             '«Отец» / «Мать» / «Ребёнок» / «Супруг(а)» / «Брат или сестра» '
             '(как в поле «Тип»). Двойной клик по строке списка тоже добавляет связь.'
         )
-        ttk.Label(lf_add, text=hint, wraplength=680, foreground='gray').pack(anchor=tk.W, pady=(6, 0))
+        self._hint_label = ttk.Label(lf_add, text=hint, wraplength=400, foreground='gray')
+        self._hint_label.pack(anchor=tk.W, pady=(6, 0))
 
-        lf_list = ttk.LabelFrame(self, text='3. Все связи (в том числе обратные)', padding=8)
-        lf_list.pack(fill=tk.BOTH, expand=True, padx=10, pady=(8, 4))
+        lf_list = ttk.LabelFrame(main, text='3. Все связи (в том числе обратные)', padding=8)
+        lf_list.grid(row=3, column=0, sticky=tk.NSEW)
+        lf_list.grid_columnconfigure(0, weight=1)
+        lf_list.grid_rowconfigure(0, weight=1)
 
         self.rel_listbox = tk.Listbox(
             lf_list,
-            height=9,
-            width=80,
+            height=4,
             exportselection=False,
             font=self._font_settings.tk_font(),
         )
         rs = ttk.Scrollbar(lf_list, orient=tk.VERTICAL, command=self.rel_listbox.yview)
         self.rel_listbox.configure(yscrollcommand=rs.set)
-        self.rel_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        rs.pack(side=tk.RIGHT, fill=tk.Y)
+        self.rel_listbox.grid(row=0, column=0, sticky=tk.NSEW)
+        rs.grid(row=0, column=1, sticky=tk.NS)
 
-        del_row = ttk.Frame(self)
-        del_row.pack(fill=tk.X, padx=10, pady=(0, 6))
+        del_row = ttk.Frame(self, padding=(10, 6, 10, 0))
+        del_row.grid(row=1, column=0, sticky=tk.EW)
         ttk.Button(del_row, text='Удалить выбранную связь', command=self._delete_relationship).pack(
             side=tk.LEFT
         )
@@ -1208,9 +1526,11 @@ class RelationsDialog(tk.Toplevel):
             foreground='gray',
         ).pack(side=tk.LEFT, padx=(12, 0))
 
-        bottom = ttk.Frame(self)
-        bottom.pack(fill=tk.X, padx=10, pady=(4, 10))
+        bottom = ttk.Frame(self, padding=(10, 6, 10, 10))
+        bottom.grid(row=2, column=0, sticky=tk.EW)
         ttk.Button(bottom, text='Закрыть', command=self._on_close).pack(side=tk.RIGHT)
+
+        self.bind('<Configure>', self._on_window_configure, add='+')
 
     def _reload_candidates(self) -> None:
         for iid in self.candidates_tree.get_children():

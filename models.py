@@ -11,6 +11,13 @@ class Gender(str, Enum):
     OTHER = 'other'
 
 
+class DeathCause(str, Enum):
+    NATURAL = 'natural'
+    ILLNESS = 'illness'
+    OTHER = 'other'
+    UNKNOWN = 'unknown'
+
+
 class Person(Base):
     __tablename__ = "persons"
 
@@ -22,7 +29,11 @@ class Person(Base):
     gender: Mapped[Gender] = mapped_column(String(10), nullable=False)
     date_of_birth: Mapped[date | None]
     date_of_death: Mapped[date | None]
+    place_of_birth: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    place_of_death: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    death_cause: Mapped[DeathCause | None] = mapped_column(String(20), nullable=True)
     biography: Mapped[str | None]
+    archive_records: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
 

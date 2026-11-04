@@ -27,11 +27,23 @@ class Person(Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     middle_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     gender: Mapped[Gender] = mapped_column(String(10), nullable=False)
+    # Legacy/sort: полная или нормализованная дата (1 янв. при известном только годе).
     date_of_birth: Mapped[date | None]
     date_of_death: Mapped[date | None]
+    # Компоненты неполной даты (после миграции заполняются из date_of_*).
+    birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_approx: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+    death_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    death_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    death_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    death_approx: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     place_of_birth: Mapped[str | None] = mapped_column(String(255), nullable=True)
     place_of_death: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    burial_place: Mapped[str | None] = mapped_column(String(255), nullable=True)
     death_cause: Mapped[DeathCause | None] = mapped_column(String(20), nullable=True)
+    maiden_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     biography: Mapped[str | None]
     archive_records: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
@@ -58,6 +70,12 @@ class Person(Base):
         back_populates='person',
         cascade='all, delete-orphan',
         order_by='Address.id',
+    )
+
+    name_variants: Mapped[list['NameVariant']] = relationship(
+        back_populates='person',
+        cascade='all, delete-orphan',
+        order_by='NameVariant.id',
     )
 
     @property
@@ -115,6 +133,9 @@ class Address(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     person_id: Mapped[int] = mapped_column(ForeignKey('persons.id', ondelete='CASCADE'), nullable=False)
     address: Mapped[str] = mapped_column(Text, nullable=False)
+    # current — сейчас; past — в прошлом
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default='current')
+    period_note: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         default=datetime.now(UTC),
@@ -125,4 +146,24 @@ class Address(Base):
 
     def __repr__(self) -> str:
         return f'Address(person_id={self.person_id}, address={self.address!r})>'
+
+
+class NameVariant(Base):
+    """Вариант имени (Данил/Даниил, Маруся/Мария и т.п.)."""
+
+    __tablename__ = 'name_variants'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey('persons.id', ondelete='CASCADE'), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
+    )
+
+    person: Mapped['Person'] = relationship(back_populates='name_variants')
+
+    def __repr__(self) -> str:
+        return f'NameVariant(person_id={self.person_id}, name={self.name!r})>'
 

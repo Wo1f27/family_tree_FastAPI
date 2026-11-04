@@ -2,7 +2,7 @@ from collections.abc import Callable
 import json
 import tkinter as tk
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from tkinter import font as tkfont
 
 from tkinter import ttk, messagebox
@@ -10,7 +10,22 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from database import DATA_DIR, SessionLocal, init_db
-from models import Address, DeathCause, Gender, Person, Phone, Relationship
+from dates import (
+    DATE_ENTRY_HINT,
+    PartialDate,
+    format_partial_display,
+    format_partial_entry,
+    partial_to_column_values,
+    person_partial_from_columns,
+    try_parse_partial_date,
+    _mask_date_digits,
+)
+
+# Только ASCII/кириллица: спецсимволы (• — →) на Linux/Tk часто рисуются квадратиками.
+DATE_INPUT_HELP = (
+    'Примеры ввода: 26051961 или 26-05-1961; 05-1961; 1961; ~1901 или около 1901'
+)
+from models import Address, DeathCause, Gender, NameVariant, Person, Phone, Relationship
 
 UI_SETTINGS_PATH = DATA_DIR / 'ui_settings.json'
 MIN_FONT_SIZE = 8
@@ -21,7 +36,20 @@ INFO_CONTACT_MAX_LINES = 5
 WIN_MIN_WIDTH = 360
 WIN_MIN_HEIGHT = 240
 WIN_MAX_WIDTH_RATIO = 0.96
-WIN_MAX_HEIGHT_RATIO = 0.92
+WIN_MAX_HEIGHT_RATIO = 0.88
+# Отступ сверху: заголовок окна + панель GNOME не должны уезжать за край.
+WIN_TOP_MARGIN = 56
+WIN_EDGE_MARGIN = 16
+
+# (подпись в комбобоксе, режим сортировки)
+_SORT_OPTIONS: tuple[tuple[str, str], ...] = (
+    ('ФИО', 'fio'),
+    ('Год рождения', 'birth_year'),
+    ('Год смерти', 'death_year'),
+)
+_SORT_OPTION_LABELS: tuple[str, ...] = tuple(label for label, _ in _SORT_OPTIONS)
+_SORT_MODE_BY_LABEL: dict[str, str] = {label: mode for label, mode in _SORT_OPTIONS}
+_SORT_LABEL_BY_MODE: dict[str, str] = {mode: label for label, mode in _SORT_OPTIONS}
 
 
 def _screen_size(widget: tk.Misc) -> tuple[int, int]:
@@ -40,19 +68,39 @@ def _apply_window_geometry(
     max_height_ratio: float = WIN_MAX_HEIGHT_RATIO,
     center: bool = True,
 ) -> tuple[int, int]:
-    """Подогнать размер окна под экран; minsize — мягкий, пользователь может уменьшать."""
+    """Подогнать размер окна под экран; minsize — мягкий, пользователь может уменьшать.
+
+    center=True — поставить по центру родителя (или экрана) с запасом сверху.
+    center=False — только размер, координаты не трогаем (важно при догрузке полей).
+    """
     sw, sh = _screen_size(window)
     max_w = max(min_width, int(sw * max_width_ratio))
     max_h = max(min_height, int(sh * max_height_ratio))
     w = max(min_width, min(width, max_w))
     h = max(min_height, min(height, max_h))
     window.minsize(min_width, min_height)
-    if center:
-        x = max(0, (sw - w) // 2)
-        y = max(0, (sh - h) // 2)
-        window.geometry(f'{w}x{h}+{x}+{y}')
-    else:
+    if not center:
         window.geometry(f'{w}x{h}')
+        return w, h
+
+    parent = getattr(window, 'master', None)
+    x = (sw - w) // 2
+    y = (sh - h) // 2
+    if parent is not None:
+        try:
+            parent.update_idletasks()
+            px = int(parent.winfo_rootx())
+            py = int(parent.winfo_rooty())
+            pw = max(1, int(parent.winfo_width()))
+            ph = max(1, int(parent.winfo_height()))
+            x = px + (pw - w) // 2
+            y = py + (ph - h) // 2
+        except (tk.TclError, ValueError, TypeError):
+            pass
+
+    x = max(WIN_EDGE_MARGIN, min(x, max(WIN_EDGE_MARGIN, sw - w - WIN_EDGE_MARGIN)))
+    y = max(WIN_TOP_MARGIN, min(y, max(WIN_TOP_MARGIN, sh - h - WIN_EDGE_MARGIN)))
+    window.geometry(f'{w}x{h}+{x}+{y}')
     return w, h
 
 
@@ -63,8 +111,10 @@ class UiFontSettings:
 
     @classmethod
     def defaults(cls, root: tk.Misc) -> 'UiFontSettings':
-        actual = tkfont.nametofont('TkDefaultFont').actual(displayof=root)
-        return cls(family=actual['family'], size=int(actual['size']))
+        family = _pick_best_font_family(root)
+        actual_size = int(tkfont.nametofont('TkDefaultFont').actual(displayof=root)['size'])
+        size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, actual_size or 11))
+        return cls(family=family, size=size)
 
     @classmethod
     def load(cls, root: tk.Misc) -> 'UiFontSettings':
@@ -76,7 +126,8 @@ class UiFontSettings:
             family = str(raw.get('font_family', defaults.family)).strip() or defaults.family
             size = int(raw.get('font_size', defaults.size))
             size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, size))
-            return cls(family=_resolve_font_family(root, family), size=size)
+            resolved = _resolve_font_family(root, family)
+            return cls(family=resolved, size=size)
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return defaults
 
@@ -94,12 +145,33 @@ class UiFontSettings:
         return self.size + 10
 
 
+_PREFERRED_FONT_FAMILIES: tuple[str, ...] = (
+    'Segoe UI',
+    'Arial',
+    'Helvetica Neue',
+    'Helvetica',
+    'DejaVu Sans',
+    'Liberation Sans',
+    'Noto Sans',
+    'Ubuntu',
+    'Cantarell',
+)
+
+
+def _pick_best_font_family(root: tk.Misc) -> str:
+    available = {name.casefold(): name for name in tkfont.families(root)}
+    for preferred in _PREFERRED_FONT_FAMILIES:
+        if preferred.casefold() in available:
+            return available[preferred.casefold()]
+    return str(tkfont.nametofont('TkDefaultFont').actual(displayof=root)['family'])
+
+
 def _resolve_font_family(root: tk.Misc, family: str) -> str:
-    available = {name.lower(): name for name in tkfont.families(root)}
-    key = family.strip().lower()
+    available = {name.casefold(): name for name in tkfont.families(root)}
+    key = family.strip().casefold()
     if key in available:
         return available[key]
-    return UiFontSettings.defaults(root).family
+    return _pick_best_font_family(root)
 
 
 def _sorted_font_families(root: tk.Misc) -> list[str]:
@@ -108,14 +180,62 @@ def _sorted_font_families(root: tk.Misc) -> list[str]:
 
 DATA_TREE_STYLE = 'Data.Treeview'
 DATA_LABEL_STYLE = 'Data.TLabel'
+CARD_BG = '#EAF6E4'  # нежно-салатовый фон карточки персоны
+CARD_FRAME_STYLE = 'Card.TFrame'
+CARD_LABEL_STYLE = 'Card.TLabel'
+CARD_LABELED_FRAME_STYLE = 'Card.TLabelframe'
 
 
 def _apply_data_fonts(style: ttk.Style, settings: UiFontSettings) -> None:
-    """Шрифт только для данных (таблицы, значения полей), не для кнопок и подписей UI."""
+    """Шрифт для данных + подписей карточки; системные кнопки оставляем на TkDefaultFont."""
     normal = settings.tk_font()
     rowheight = settings.tree_rowheight()
     style.configure(DATA_TREE_STYLE, font=normal, rowheight=rowheight)
     style.configure(DATA_LABEL_STYLE, font=normal)
+    style.configure(CARD_LABEL_STYLE, font=normal, background=CARD_BG)
+
+
+def _apply_card_styles(style: ttk.Style) -> None:
+    style.configure(CARD_FRAME_STYLE, background=CARD_BG)
+    style.configure(CARD_LABEL_STYLE, background=CARD_BG)
+    style.configure(CARD_LABELED_FRAME_STYLE, background=CARD_BG)
+    style.configure(f'{CARD_LABELED_FRAME_STYLE}.Label', background=CARD_BG)
+
+
+def _apply_app_fonts(root: tk.Misc, settings: UiFontSettings) -> None:
+    """Применить выбранный шрифт к стандартным именованным шрифтам Tk."""
+    family = settings.family
+    size = max(MIN_FONT_SIZE, min(MAX_FONT_SIZE, settings.size))
+    ui_size = max(9, min(14, size - 2 if size >= 12 else size))
+    for name, sz in (
+        ('TkDefaultFont', ui_size),
+        ('TkTextFont', size),
+        ('TkHeadingFont', ui_size),
+        ('TkMenuFont', ui_size),
+        ('TkCaptionFont', ui_size),
+    ):
+        try:
+            tkfont.nametofont(name).configure(family=family, size=sz)
+        except tk.TclError:
+            continue
+
+
+def _bind_return_to_next(widget: tk.Misc, next_widget: tk.Misc) -> None:
+    """Enter / Return переводит фокус на следующее поле формы."""
+
+    def _go(_event: tk.Event) -> str:
+        next_widget.focus_set()
+        return 'break'
+
+    widget.bind('<Return>', _go)
+    widget.bind('<KP_Enter>', _go)
+
+
+@dataclass
+class ResidenceData:
+    address: str
+    kind: str = 'current'  # current | past
+    period_note: str | None = None
 
 
 @dataclass
@@ -123,16 +243,34 @@ class PersonData:
     first_name: str
     last_name: str
     middle_name: str | None
+    maiden_name: str | None
     gender: Gender
-    date_of_birth: date | None
-    date_of_death: date | None
+    date_of_birth: PartialDate | None
+    date_of_death: PartialDate | None
     place_of_birth: str | None
     place_of_death: str | None
+    burial_place: str | None
     death_cause: DeathCause | None
     biography: str | None
     archive_records: str | None
     phones: list[str]
-    addresses: list[str]
+    name_variants: list[str]
+    residences: list[ResidenceData]
+
+
+RESIDENCE_KIND_LABELS: dict[str, str] = {
+    'current': 'Сейчас',
+    'past': 'В прошлом',
+}
+RESIDENCE_KIND_RU_TO_KEY: dict[str, str] = {v: k for k, v in RESIDENCE_KIND_LABELS.items()}
+
+
+def format_residence_line(item: ResidenceData) -> str:
+    addr = item.address.strip()
+    if item.kind == 'past':
+        period = f' ({item.period_note})' if item.period_note else ''
+        return f'ранее{period}: {addr}'
+    return f'сейчас: {addr}'
 
 
 def _load_person_phones(session: Session, person_id: int) -> list[str]:
@@ -140,23 +278,53 @@ def _load_person_phones(session: Session, person_id: int) -> list[str]:
     return list(session.scalars(stmt).all())
 
 
-def _load_person_addresses(session: Session, person_id: int) -> list[str]:
-    stmt = select(Address.address).where(Address.person_id == person_id).order_by(Address.id)
+def _load_person_name_variants(session: Session, person_id: int) -> list[str]:
+    stmt = select(NameVariant.name).where(NameVariant.person_id == person_id).order_by(NameVariant.id)
     return list(session.scalars(stmt).all())
+
+
+def _load_person_residences(session: Session, person_id: int) -> list[ResidenceData]:
+    rows = session.execute(
+        select(Address).where(Address.person_id == person_id).order_by(Address.id)
+    ).scalars().all()
+    result: list[ResidenceData] = []
+    for row in rows:
+        kind = (row.kind or 'current').strip().lower()
+        if kind not in ('current', 'past'):
+            kind = 'current'
+        result.append(
+            ResidenceData(
+                address=row.address,
+                kind=kind,
+                period_note=row.period_note,
+            )
+        )
+    return result
 
 
 def _save_person_contacts(
     session: Session,
     person_id: int,
     phones: list[str],
-    addresses: list[str],
+    name_variants: list[str],
+    residences: list[ResidenceData],
 ) -> None:
     session.execute(delete(Phone).where(Phone.person_id == person_id))
+    session.execute(delete(NameVariant).where(NameVariant.person_id == person_id))
     session.execute(delete(Address).where(Address.person_id == person_id))
     for number in phones:
         session.add(Phone(person_id=person_id, number=number))
-    for addr in addresses:
-        session.add(Address(person_id=person_id, address=addr))
+    for name in name_variants:
+        session.add(NameVariant(person_id=person_id, name=name))
+    for item in residences:
+        session.add(
+            Address(
+                person_id=person_id,
+                address=item.address,
+                kind=item.kind,
+                period_note=item.period_note,
+            )
+        )
 
 
 GENDER_LABELS_RU: dict[str, str] = {
@@ -179,96 +347,93 @@ DEATH_CAUSE_RU_TO_KEY: dict[str, str] = {
 }
 
 
-DATE_ENTRY_FMT = '%d-%m-%Y'
-DATE_ENTRY_HINT = 'ДД-ММ-ГГГГ'
-
-MONTH_NAMES_RU_GENITIVE: tuple[str, ...] = (
-    '',
-    'января',
-    'февраля',
-    'марта',
-    'апреля',
-    'мая',
-    'июня',
-    'июля',
-    'августа',
-    'сентября',
-    'октября',
-    'ноября',
-    'декабря',
-)
-
-
-def format_date_display(value: date | None, *, empty: str = '—') -> str:
+def format_date_display(value: PartialDate | date | None, *, empty: str = '—') -> str:
     if value is None:
         return empty
-    return f'{value.day} {MONTH_NAMES_RU_GENITIVE[value.month]} {value.year} г.'
+    if isinstance(value, PartialDate):
+        return format_partial_display(value, empty=empty)
+    if isinstance(value, date):
+        return format_partial_display(PartialDate.from_full_date(value), empty=empty)
+    return empty
 
 
-def format_date_entry(value: date | None) -> str:
-    if value is None:
-        return ''
-    return value.strftime(DATE_ENTRY_FMT)
-
-
-def _mask_date_digits(digits: str) -> str:
-    digits = digits[:8]
-    if len(digits) <= 2:
-        return digits
-    if len(digits) <= 4:
-        return f'{digits[:2]}-{digits[2:]}'
-    return f'{digits[:2]}-{digits[2:4]}-{digits[4:]}'
-
-
-def _try_parse_date_flexible(value: str) -> date | None:
-    text = value.strip()
-    if not text:
-        return None
-    for fmt in ('%d-%m-%Y', '%d.%m.%Y', '%Y-%m-%d', '%Y.%m.%d'):
-        try:
-            return datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    digits = ''.join(ch for ch in text if ch.isdigit())
-    if len(digits) == 8:
-        for fmt in ('%d%m%Y', '%Y%m%d'):
-            try:
-                return datetime.strptime(digits, fmt).date()
-            except ValueError:
-                continue
-    return None
-
-
-def parse_date_entry(date_str: str, field_label: str) -> date | None | bool:
-    """date | None — ок; False — ошибка показана."""
+def parse_date_entry(date_str: str, field_label: str) -> PartialDate | None | bool:
+    """PartialDate | None — ок; False — ошибка показана."""
     if not date_str.strip():
         return None
-    parsed = _try_parse_date_flexible(date_str)
+    parsed = try_parse_partial_date(date_str)
     if parsed is None:
-        messagebox.showerror('Ошибка', f'Некорректная {field_label}. Формат: {DATE_ENTRY_HINT}')
+        messagebox.showerror(
+            'Ошибка',
+            f'Некорректная {field_label}.\nДопустимо: {DATE_ENTRY_HINT}',
+        )
         return False
     return parsed
 
 
+def _person_birth_partial(person: Person) -> PartialDate | None:
+    return person_partial_from_columns(
+        year=person.birth_year,
+        month=person.birth_month,
+        day=person.birth_day,
+        approx=person.birth_approx,
+        legacy=person.date_of_birth,
+    )
+
+
+def _person_death_partial(person: Person) -> PartialDate | None:
+    return person_partial_from_columns(
+        year=person.death_year,
+        month=person.death_month,
+        day=person.death_day,
+        approx=person.death_approx,
+        legacy=person.date_of_death,
+    )
+
+
+def _apply_partial_to_person(
+    person: Person,
+    birth: PartialDate | None,
+    death: PartialDate | None,
+) -> None:
+    b = partial_to_column_values(birth)
+    person.birth_year = b['year']  # type: ignore[assignment]
+    person.birth_month = b['month']  # type: ignore[assignment]
+    person.birth_day = b['day']  # type: ignore[assignment]
+    person.birth_approx = b['approx']  # type: ignore[assignment]
+    person.date_of_birth = b['sort_date']  # type: ignore[assignment]
+
+    d = partial_to_column_values(death)
+    person.death_year = d['year']  # type: ignore[assignment]
+    person.death_month = d['month']  # type: ignore[assignment]
+    person.death_day = d['day']  # type: ignore[assignment]
+    person.death_approx = d['approx']  # type: ignore[assignment]
+    person.date_of_death = d['sort_date']  # type: ignore[assignment]
+
+
 class DateMaskEntry(ttk.Entry):
-    """Поле даты: ввод цифр, автоматически ДД-ММ-ГГГГ."""
+    """Поле даты: полная / месяц-год / год / ~год."""
 
     def __init__(self, parent: tk.Misc, textvariable: tk.StringVar | None = None, **kwargs) -> None:
         self._date_var = textvariable or tk.StringVar()
-        super().__init__(parent, textvariable=self._date_var, width=kwargs.pop('width', 14), **kwargs)
+        super().__init__(parent, textvariable=self._date_var, width=kwargs.pop('width', 18), **kwargs)
         self._updating = False
         self.bind('<KeyRelease>', self._on_key_release)
         self.bind('<FocusOut>', self._on_focus_out)
 
-    def _on_key_release(self, _event: tk.Event) -> None:
+    def _on_key_release(self, event: tk.Event) -> None:
         if self._updating:
             return
+        if event.keysym in ('BackSpace', 'Delete', 'Left', 'Right', 'Home', 'End'):
+            return
         raw = self._date_var.get()
-        parsed = _try_parse_date_flexible(raw)
-        if parsed is not None and len(''.join(ch for ch in raw if ch.isdigit())) >= 8:
-            formatted = format_date_entry(parsed)
+        if any(ch.isalpha() for ch in raw) or raw.lstrip().startswith(('~', '≈')):
+            return
+        digits = ''.join(ch for ch in raw if ch.isdigit())[:8]
+        parsed = try_parse_partial_date(raw)
+        if parsed is not None and len(digits) >= 8 and parsed.day is not None:
+            formatted = format_partial_entry(parsed)
         else:
-            digits = ''.join(ch for ch in raw if ch.isdigit())[:8]
             formatted = _mask_date_digits(digits)
         if formatted == raw:
             return
@@ -282,10 +447,10 @@ class DateMaskEntry(ttk.Entry):
         raw = self._date_var.get().strip()
         if not raw:
             return
-        parsed = _try_parse_date_flexible(raw)
+        parsed = try_parse_partial_date(raw)
         if parsed is None:
             return
-        formatted = format_date_entry(parsed)
+        formatted = format_partial_entry(parsed)
         if formatted != raw:
             self._updating = True
             self._date_var.set(formatted)
@@ -331,37 +496,224 @@ def _death_cause_display_raw(cause: DeathCause | str | None) -> str:
 # Семантика записи Relationship:
 # person_id — субъект, person_id_related — второй человек;
 # relationship_type: роль второго по отношению к первому
-# (у person_id второй — это его отец / мать / ребёнок / супруг / брат или сестра).
+# (у person_id второй — это его отец / мать / сын / супруга / …).
 
 REL_LABELS_RU: dict[str, str] = {
     'father': 'Отец',
     'mother': 'Мать',
+    'husband': 'Супруг',
+    'wife': 'Супруга',
+    'brother': 'Брат',
+    'sister': 'Сестра',
+    'son': 'Сын',
+    'daughter': 'Дочь',
+    'uncle': 'Дядя',
+    'aunt': 'Тётя',
+    'nephew': 'Племянник',
+    'niece': 'Племянница',
+    'grandson': 'Внук',
+    'granddaughter': 'Внучка',
+    'grandfather': 'Дедушка',
+    'grandmother': 'Бабушка',
+    # устаревшие ключи — только для чтения старых БД
     'child': 'Ребёнок',
     'spouse': 'Супруг(а)',
     'sibling': 'Брат или сестра',
     'parent': 'Родитель',
 }
 
-REL_ORDER_FOR_ADD: tuple[str, ...] = ('father', 'mother', 'child', 'spouse', 'sibling')
+REL_ORDER_FOR_ADD: tuple[str, ...] = (
+    'father',
+    'mother',
+    'husband',
+    'wife',
+    'brother',
+    'sister',
+    'son',
+    'daughter',
+    'uncle',
+    'aunt',
+    'nephew',
+    'niece',
+    'grandson',
+    'granddaughter',
+)
 
 REL_COMBO_LABELS: list[str] = [REL_LABELS_RU[k] for k in REL_ORDER_FOR_ADD]
 RU_LABEL_TO_KEY: dict[str, str] = {REL_LABELS_RU[k]: k for k in REL_ORDER_FOR_ADD}
 
+# Базовые обратные роли (до уточнения по полу второго человека).
+_REVERSE_BASE: dict[str, str] = {
+    'father': 'child',
+    'mother': 'child',
+    'son': 'parent',
+    'daughter': 'parent',
+    'child': 'parent',
+    'parent': 'child',
+    'husband': 'wife',
+    'wife': 'husband',
+    'spouse': 'spouse',
+    'brother': 'sibling',
+    'sister': 'sibling',
+    'sibling': 'sibling',
+    'uncle': 'nibling',
+    'aunt': 'nibling',
+    'nephew': 'pibling',
+    'niece': 'pibling',
+    'grandson': 'grandparent',
+    'granddaughter': 'grandparent',
+    'grandfather': 'grandchild',
+    'grandmother': 'grandchild',
+}
 
-def _reverse_relationship_type(stored_type: str) -> str:
-    """Для строки, где person_id_related = P: какую роль имеет person_id для P (обратная роль)."""
+_PARENT_CHILD_KEYS = frozenset({'father', 'mother', 'son', 'daughter', 'child', 'parent'})
+_SPOUSE_KEYS = frozenset({'husband', 'wife', 'spouse'})
+_SIBLING_KEYS = frozenset({'brother', 'sister', 'sibling'})
+_NIBLING_KEYS = frozenset({'nephew', 'niece'})
+_PIBLING_KEYS = frozenset({'uncle', 'aunt'})
+_GRANDCHILD_KEYS = frozenset({'grandson', 'granddaughter'})
+_GRANDPARENT_KEYS = frozenset({'grandfather', 'grandmother'})
+
+
+def _refine_role_by_gender(base_role: str, person: Person | None) -> str:
+    """Уточнить роль (сын/дочь, мама/папа, …) по полу человека."""
+    g = _gender_key(person.gender) if person is not None else ''
+    if base_role == 'child':
+        if g == 'female':
+            return 'daughter'
+        if g == 'male':
+            return 'son'
+        return 'child'
+    if base_role == 'parent':
+        if g == 'female':
+            return 'mother'
+        if g == 'male':
+            return 'father'
+        return 'parent'
+    if base_role == 'sibling':
+        if g == 'female':
+            return 'sister'
+        if g == 'male':
+            return 'brother'
+        return 'sibling'
+    if base_role == 'nibling':
+        if g == 'female':
+            return 'niece'
+        if g == 'male':
+            return 'nephew'
+        return 'nephew'
+    if base_role == 'pibling':
+        if g == 'female':
+            return 'aunt'
+        if g == 'male':
+            return 'uncle'
+        return 'uncle'
+    if base_role == 'grandparent':
+        if g == 'female':
+            return 'grandmother'
+        if g == 'male':
+            return 'grandfather'
+        return 'parent'
+    if base_role == 'grandchild':
+        if g == 'female':
+            return 'granddaughter'
+        if g == 'male':
+            return 'grandson'
+        return 'child'
+    return base_role
+
+
+def _reverse_relationship_type(stored_type: str, other: Person | None = None) -> str:
+    """Обратная роль person_id для P=person_id_related; other — тот, кто в роли для P."""
     t = (stored_type or '').strip().lower()
-    return {
-        'father': 'child',
-        'mother': 'child',
-        'child': 'parent',
-        'spouse': 'spouse',
-        'sibling': 'sibling',
-    }.get(t, t)
+    base = _REVERSE_BASE.get(t, t)
+    return _refine_role_by_gender(base, other)
 
 
 def _rel_type_label(type_key: str) -> str:
     return REL_LABELS_RU.get((type_key or '').strip().lower(), type_key or '?')
+
+
+def _person_short_fio(person: Person) -> str:
+    parts = [person.last_name or '', person.first_name or '']
+    if person.middle_name:
+        parts.append(person.middle_name)
+    return ' '.join(p for p in parts if p).strip() or '—'
+
+
+def _parent_role_word(type_key: str, person: Person) -> str:
+    k = (type_key or '').strip().lower()
+    if k == 'mother' or (k == 'parent' and _gender_key(person.gender) == 'female'):
+        return 'мама'
+    if k == 'father' or (k == 'parent' and _gender_key(person.gender) == 'male'):
+        return 'папа'
+    return 'родитель'
+
+
+def _child_role_word(type_key: str, person: Person) -> str:
+    k = (type_key or '').strip().lower()
+    if k == 'daughter' or (k == 'child' and _gender_key(person.gender) == 'female'):
+        return 'дочь'
+    if k == 'son' or (k == 'child' and _gender_key(person.gender) == 'male'):
+        return 'сын'
+    return 'ребёнок'
+
+
+def format_relationships_grouped(
+    edges: list[tuple[Relationship, Person, str]],
+) -> str:
+    """Текст для карточки: «Родители: мама …, папа …» и т.п."""
+    parents: list[str] = []
+    spouses: list[str] = []
+    children: list[str] = []
+    siblings: list[str] = []
+    uncles_aunts: list[str] = []
+    nephews: list[str] = []
+    grandparents: list[str] = []
+    grandchildren: list[str] = []
+    other: list[str] = []
+
+    for _rel, person, type_key in edges:
+        k = (type_key or '').strip().lower()
+        fio = _person_short_fio(person)
+        if k in ('father', 'mother', 'parent'):
+            parents.append(f'{_parent_role_word(k, person)} {fio}')
+        elif k in _SPOUSE_KEYS:
+            spouses.append(f'{_rel_type_label(k).lower()} {fio}')
+        elif k in ('son', 'daughter', 'child'):
+            children.append(f'{_child_role_word(k, person)} {fio}')
+        elif k in _SIBLING_KEYS:
+            siblings.append(f'{_rel_type_label(k).lower()} {fio}')
+        elif k in _PIBLING_KEYS:
+            uncles_aunts.append(f'{_rel_type_label(k).lower()} {fio}')
+        elif k in _NIBLING_KEYS:
+            nephews.append(f'{_rel_type_label(k).lower()} {fio}')
+        elif k in _GRANDPARENT_KEYS:
+            grandparents.append(f'{_rel_type_label(k).lower()} {fio}')
+        elif k in _GRANDCHILD_KEYS:
+            grandchildren.append(f'{_rel_type_label(k).lower()} {fio}')
+        else:
+            other.append(f'{_rel_type_label(k)}: {fio}')
+
+    lines: list[str] = []
+    if parents:
+        lines.append('Родители: ' + ', '.join(parents))
+    if spouses:
+        lines.append('Супруги: ' + ', '.join(spouses))
+    if children:
+        lines.append('Дети: ' + ', '.join(children))
+    if siblings:
+        lines.append('Братья и сёстры: ' + ', '.join(siblings))
+    if grandparents:
+        lines.append('Бабушки и дедушки: ' + ', '.join(grandparents))
+    if grandchildren:
+        lines.append('Внуки: ' + ', '.join(grandchildren))
+    if uncles_aunts:
+        lines.append('Дяди и тёти: ' + ', '.join(uncles_aunts))
+    if nephews:
+        lines.append('Племянники: ' + ', '.join(nephews))
+    lines.extend(other)
+    return '\n'.join(lines)
 
 
 def iter_person_edges_view(
@@ -383,7 +735,8 @@ def iter_person_edges_view(
     ).scalars().all():
         other = session.get(Person, rel.person_id)
         if other:
-            k = _reverse_relationship_type(rel.relationship_type)
+            # other — тот, кто создал запись; для P уточняем его роль по полу other
+            k = _reverse_relationship_type(rel.relationship_type, other)
             rows.append((rel, other, k))
     rows.sort(
         key=lambda x: (
@@ -395,44 +748,44 @@ def iter_person_edges_view(
     return rows
 
 
-def _has_equivalent_relationship(session: Session, person_id: int, related_id: int, type_key: str) -> bool:
-    """Та же семантика, что и при добавлении (в т.ч. обратная запись child↔father/mother)."""
+def _equivalent_type_groups(type_key: str) -> frozenset[str]:
     t = type_key.strip().lower()
+    if t in _PARENT_CHILD_KEYS:
+        return _PARENT_CHILD_KEYS
+    if t in _SPOUSE_KEYS:
+        return _SPOUSE_KEYS
+    if t in _SIBLING_KEYS:
+        return _SIBLING_KEYS
+    if t in _NIBLING_KEYS | _PIBLING_KEYS:
+        return _NIBLING_KEYS | _PIBLING_KEYS
+    if t in _GRANDCHILD_KEYS | _GRANDPARENT_KEYS:
+        return _GRANDCHILD_KEYS | _GRANDPARENT_KEYS
+    return frozenset({t})
+
+
+def _has_equivalent_relationship(session: Session, person_id: int, related_id: int, type_key: str) -> bool:
+    """Та же семантика, что и при добавлении (в т.ч. обратная запись)."""
+    t = type_key.strip().lower()
+    group = _equivalent_type_groups(t)
+
     if session.execute(
         select(Relationship).where(
             Relationship.person_id == person_id,
             Relationship.person_id_related == related_id,
-            Relationship.relationship_type == t,
+            Relationship.relationship_type.in_(tuple(group)),
         )
     ).scalar_one_or_none():
         return True
-    if t in ('father', 'mother'):
-        if session.execute(
-            select(Relationship).where(
-                Relationship.person_id == related_id,
-                Relationship.person_id_related == person_id,
-                Relationship.relationship_type == 'child',
-            )
-        ).scalar_one_or_none():
-            return True
-    if t == 'child':
-        if session.execute(
-            select(Relationship).where(
-                Relationship.person_id == related_id,
-                Relationship.person_id_related == person_id,
-                Relationship.relationship_type.in_(('father', 'mother')),
-            )
-        ).scalar_one_or_none():
-            return True
-    if t in ('spouse', 'sibling'):
-        if session.execute(
-            select(Relationship).where(
-                Relationship.person_id == related_id,
-                Relationship.person_id_related == person_id,
-                Relationship.relationship_type == t,
-            )
-        ).scalar_one_or_none():
-            return True
+
+    if session.execute(
+        select(Relationship).where(
+            Relationship.person_id == related_id,
+            Relationship.person_id_related == person_id,
+            Relationship.relationship_type.in_(tuple(group)),
+        )
+    ).scalar_one_or_none():
+        return True
+
     return False
 
 
@@ -452,7 +805,11 @@ class GenealogyApp:
         self.db_session = SessionLocal()
         self._font_settings = UiFontSettings.load(root)
         self._style = ttk.Style(root)
+        _apply_card_styles(self._style)
+        _apply_app_fonts(root, self._font_settings)
         _apply_data_fonts(self._style, self._font_settings)
+        self._sort_mode: str = 'fio'  # fio | birth_year | death_year
+        self._sort_ascending: bool = True
 
         self._create_widgets()
         self._load_people()
@@ -466,10 +823,36 @@ class GenealogyApp:
         top_frame = ttk.Frame(self.root, padding=10)
         top_frame.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Button(top_frame, text='Добавить человека', command=self._add_person).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_frame, text='Добавить персону', command=self._add_person).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_frame, text='Редактировать', command=self._edit_person).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_frame, text='Удалить', command=self._delete_person).pack(side=tk.LEFT, padx=5)
         ttk.Button(top_frame, text='Связи', command=self._manage_relationships).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(top_frame, text='Сортировка:').pack(side=tk.LEFT, padx=(16, 4))
+        self._sort_combo_var = tk.StringVar()
+        self._sort_combo = ttk.Combobox(
+            top_frame,
+            textvariable=self._sort_combo_var,
+            values=list(_SORT_OPTION_LABELS),
+            state='readonly',
+            width=14,
+        )
+        self._sort_combo.pack(side=tk.LEFT, padx=(0, 4))
+        self._sort_combo.bind('<<ComboboxSelected>>', self._on_sort_combo_selected)
+        self._btn_sort_dir = ttk.Button(
+            top_frame,
+            text='↑',
+            width=3,
+            command=self._toggle_sort_direction,
+        )
+        self._btn_sort_dir.pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(
+            top_frame,
+            text='✕',
+            width=3,
+            command=self._reset_sort,
+        ).pack(side=tk.LEFT, padx=(0, 5))
+
         ttk.Button(top_frame, text='Настройки', command=self._open_settings).pack(side=tk.RIGHT, padx=5)
 
         self._paned = ttk.Panedwindow(self.root, orient=tk.VERTICAL)
@@ -481,121 +864,119 @@ class GenealogyApp:
         bottom_outer = ttk.Frame(self._paned, padding=(10, 0, 10, 10))
         self._paned.add(bottom_outer, weight=1)
 
-        info_shell = ttk.LabelFrame(bottom_outer, text='Информация о выбранном человеке', padding=8)
+        info_shell = ttk.LabelFrame(
+            bottom_outer,
+            text='Карточка персоны',
+            padding=8,
+            style=CARD_LABELED_FRAME_STYLE,
+        )
         info_shell.pack(fill=tk.BOTH, expand=True)
 
-        canvas_row = ttk.Frame(info_shell)
+        canvas_row = ttk.Frame(info_shell, style=CARD_FRAME_STYLE)
         canvas_row.pack(fill=tk.BOTH, expand=True)
         canvas_row.columnconfigure(0, weight=1)
         canvas_row.rowconfigure(0, weight=1)
 
-        self._info_canvas = tk.Canvas(canvas_row, highlightthickness=0, borderwidth=0)
+        self._info_canvas = tk.Canvas(
+            canvas_row,
+            highlightthickness=0,
+            borderwidth=0,
+            background=CARD_BG,
+        )
         info_scroll = ttk.Scrollbar(canvas_row, orient=tk.VERTICAL, command=self._info_canvas.yview)
         self._info_canvas.configure(yscrollcommand=info_scroll.set)
         self._info_canvas.grid(row=0, column=0, sticky=tk.NSEW)
         info_scroll.grid(row=0, column=1, sticky=tk.NS)
 
-        self._info_grid = ttk.Frame(self._info_canvas)
+        self._info_grid = ttk.Frame(self._info_canvas, style=CARD_FRAME_STYLE)
         self._info_canvas_window = self._info_canvas.create_window(
             (0, 0), window=self._info_grid, anchor=tk.NW
         )
 
         def row(r: int, title: str) -> ttk.Label:
-            ttk.Label(self._info_grid, text=title, width=14, anchor=tk.W).grid(
-                row=r, column=0, sticky=tk.NW, pady=1
+            ttk.Label(
+                self._info_grid,
+                text=title,
+                anchor=tk.W,
+                style=CARD_LABEL_STYLE,
+            ).grid(row=r, column=0, sticky=tk.NW, padx=(0, 10), pady=1)
+            lbl = ttk.Label(
+                self._info_grid,
+                text='—',
+                anchor=tk.W,
+                style=DATA_LABEL_STYLE,
             )
-            lbl = ttk.Label(self._info_grid, text='—', anchor=tk.W, style=DATA_LABEL_STYLE)
             lbl.grid(row=r, column=1, sticky=tk.EW, pady=1)
             return lbl
 
         self._info_name = row(0, 'ФИО:')
-        self._info_middle = row(1, 'Отчество:')
-        self._info_gender = row(2, 'Пол:')
-        self._info_birth = row(3, 'Рождение:')
-        self._info_birth_place = row(4, 'Место рожд.:')
-        self._info_death = row(5, 'Смерть:')
-        self._info_death_place = row(6, 'Место смерти:')
-        self._info_death_cause = row(7, 'Причина смерти:')
+        self._info_maiden = row(1, 'Прежн. фам.:')
+        self._info_middle = row(2, 'Отчество:')
+        self._info_gender = row(3, 'Пол:')
+        self._info_birth = row(4, 'Рождение:')
+        self._info_birth_place = row(5, 'Место рожд.:')
+        self._info_death = row(6, 'Смерть:')
+        self._info_death_place = row(7, 'Место смерти:')
+        self._info_burial = row(8, 'Погребение:')
+        self._info_death_cause = row(9, 'Причина смерти:')
         self._info_value_labels = (
             self._info_name,
+            self._info_maiden,
             self._info_middle,
             self._info_gender,
             self._info_birth,
             self._info_birth_place,
             self._info_death,
             self._info_death_place,
+            self._info_burial,
             self._info_death_cause,
         )
 
-        ttk.Label(self._info_grid, text='Телефоны:', anchor=tk.NW).grid(
-            row=8, column=0, sticky=tk.NW, pady=(4, 0)
-        )
-        self._info_phones = tk.Text(
-            self._info_grid,
-            height=1,
-            wrap=tk.WORD,
-            state=tk.DISABLED,
-            relief=tk.FLAT,
-            font=self._font_settings.tk_font(),
-        )
-        self._info_phones.grid(row=8, column=1, sticky=tk.EW, pady=(4, 0))
+        def card_title(r: int, title: str) -> None:
+            ttk.Label(
+                self._info_grid,
+                text=title,
+                anchor=tk.NW,
+                style=CARD_LABEL_STYLE,
+            ).grid(row=r, column=0, sticky=tk.NW, pady=(4, 0))
 
-        ttk.Label(self._info_grid, text='Адреса:', anchor=tk.NW).grid(
-            row=9, column=0, sticky=tk.NW, pady=(4, 0)
-        )
-        self._info_addresses = tk.Text(
-            self._info_grid,
-            height=1,
-            wrap=tk.WORD,
-            state=tk.DISABLED,
-            relief=tk.FLAT,
-            font=self._font_settings.tk_font(),
-        )
-        self._info_addresses.grid(row=9, column=1, sticky=tk.EW, pady=(4, 0))
+        def card_text(r: int, height: int) -> tk.Text:
+            widget = tk.Text(
+                self._info_grid,
+                height=height,
+                wrap=tk.WORD,
+                state=tk.DISABLED,
+                relief=tk.FLAT,
+                font=self._font_settings.tk_font(),
+                background=CARD_BG,
+                highlightthickness=0,
+            )
+            widget.grid(row=r, column=1, sticky=tk.EW, pady=(4, 0))
+            return widget
 
-        ttk.Label(self._info_grid, text='Биография:', anchor=tk.NW).grid(
-            row=10, column=0, sticky=tk.NW, pady=(4, 0)
-        )
-        self._info_bio = tk.Text(
-            self._info_grid,
-            height=3,
-            wrap=tk.WORD,
-            state=tk.DISABLED,
-            relief=tk.FLAT,
-            font=self._font_settings.tk_font(),
-        )
-        self._info_bio.grid(row=10, column=1, sticky=tk.EW, pady=(4, 0))
+        card_title(10, 'Варианты имени:')
+        self._info_name_variants = card_text(10, 1)
 
-        ttk.Label(self._info_grid, text='Архивные записи:', anchor=tk.NW).grid(
-            row=11, column=0, sticky=tk.NW, pady=(4, 0)
-        )
-        self._info_archive = tk.Text(
-            self._info_grid,
-            height=3,
-            wrap=tk.WORD,
-            state=tk.DISABLED,
-            relief=tk.FLAT,
-            font=self._font_settings.tk_font(),
-        )
-        self._info_archive.grid(row=11, column=1, sticky=tk.EW, pady=(4, 0))
+        card_title(11, 'Телефоны:')
+        self._info_phones = card_text(11, 1)
 
-        ttk.Label(self._info_grid, text='Связи:', anchor=tk.NW).grid(
-            row=12, column=0, sticky=tk.NW, pady=(4, 0)
-        )
-        self._info_rels = tk.Text(
-            self._info_grid,
-            height=3,
-            wrap=tk.WORD,
-            state=tk.DISABLED,
-            relief=tk.FLAT,
-            font=self._font_settings.tk_font(),
-        )
-        self._info_rels.grid(row=12, column=1, sticky=tk.EW, pady=(4, 0))
+        card_title(12, 'Места жительства:')
+        self._info_addresses = card_text(12, 1)
+
+        card_title(13, 'Примечание:')
+        self._info_bio = card_text(13, 3)
+
+        card_title(14, 'Архивные записи:')
+        self._info_archive = card_text(14, 3)
+
+        card_title(15, 'Связи:')
+        self._info_rels = card_text(15, 3)
 
         self._info_grid.columnconfigure(1, weight=1)
 
         self._info_phone_line_count = 1
         self._info_address_line_count = 1
+        self._info_name_variant_line_count = 1
 
         self._info_grid.bind('<Configure>', self._on_info_grid_configure)
         self._info_canvas.bind('<Configure>', self._on_info_canvas_configure)
@@ -603,12 +984,20 @@ class GenealogyApp:
         self._info_canvas.bind('<Enter>', self._bind_info_mousewheel)
         self._info_canvas.bind('<Leave>', self._unbind_info_mousewheel)
 
-        columns = ('id', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Дата рождения', 'Дата смерти', 'Биография')
+        columns = ('id', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Дата рождения', 'Дата смерти', 'Примечание')
         self.tree = ttk.Treeview(middle_frame, columns=columns, show='headings', style=DATA_TREE_STYLE)
 
         for col in columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100)
+
+        self.tree.heading('Фамилия', text='Фамилия', command=lambda: self._set_sort('fio'))
+        self.tree.heading(
+            'Дата рождения', text='Дата рождения', command=lambda: self._set_sort('birth_year')
+        )
+        self.tree.heading(
+            'Дата смерти', text='Дата смерти', command=lambda: self._set_sort('death_year')
+        )
 
         self.tree.column('id', width=0, stretch=False)
         self.tree.column('Имя', width=120)
@@ -616,7 +1005,9 @@ class GenealogyApp:
         self.tree.column('Отчество', width=150)
         self.tree.column('Дата рождения', width=165)
         self.tree.column('Дата смерти', width=165)
-        self.tree.column('Биография', width=200)
+        self.tree.column('Примечание', width=200)
+        self._update_sort_ui()
+
 
         scrollbar = ttk.Scrollbar(middle_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -645,11 +1036,12 @@ class GenealogyApp:
 
     def _info_panel_canvas_height(self) -> int:
         line_h = self._font_settings.size + 10
-        rows_h = 8 * line_h
+        rows_h = 10 * line_h
         phone_lines = self._info_phone_line_count
         address_lines = self._info_address_line_count
+        variant_lines = self._info_name_variant_line_count
         text_lines = self._info_text_height_lines()
-        text_h = (phone_lines + address_lines + 3 * text_lines) * line_h
+        text_h = (phone_lines + address_lines + variant_lines + 3 * text_lines) * line_h
         return rows_h + text_h + 28
 
     def _on_info_grid_configure(self, _event: tk.Event | None = None) -> None:
@@ -681,15 +1073,18 @@ class GenealogyApp:
     def _update_info_wraplengths(self) -> None:
         if not hasattr(self, '_info_bio'):
             return
-        wrap = max(120, self._info_bio.winfo_width() - 4)
-        if wrap <= 1:
+        # Не ставим крошечный wraplength — иначе буквы «ломаются» по одной.
+        width = self._info_bio.winfo_width()
+        if width < 80:
             return
+        wrap = max(200, width - 4)
         for lbl in self._info_value_labels:
             lbl.configure(wraplength=wrap)
 
     def _relayout_info_panel(self) -> None:
         text_lines = self._info_text_height_lines()
         font = self._font_settings.tk_font()
+        self._info_name_variants.configure(height=self._info_name_variant_line_count, font=font)
         self._info_phones.configure(height=self._info_phone_line_count, font=font)
         self._info_addresses.configure(height=self._info_address_line_count, font=font)
         for widget in (self._info_bio, self._info_archive, self._info_rels):
@@ -706,6 +1101,8 @@ class GenealogyApp:
         self._update_info_wraplengths()
 
     def _apply_font_settings(self) -> None:
+        _apply_app_fonts(self.root, self._font_settings)
+        _apply_card_styles(self._style)
         _apply_data_fonts(self._style, self._font_settings)
         self._relayout_info_panel()
 
@@ -723,23 +1120,102 @@ class GenealogyApp:
         widget.insert('1.0', text or '')
         widget.configure(state=tk.DISABLED)
 
+    def _set_sort(self, mode: str) -> None:
+        """Клик по заголовку колонки: тот же режим — смена направления, иначе возрастание."""
+        if mode == self._sort_mode:
+            self._sort_ascending = not self._sort_ascending
+        else:
+            self._sort_mode = mode
+            self._sort_ascending = True
+        self._update_sort_ui()
+        self._load_people()
+
+    def _toggle_sort_direction(self) -> None:
+        self._sort_ascending = not self._sort_ascending
+        self._update_sort_ui()
+        self._load_people()
+
+    def _reset_sort(self) -> None:
+        """Сброс к сортировке по ФИО по возрастанию."""
+        if self._sort_mode == 'fio' and self._sort_ascending:
+            return
+        self._sort_mode = 'fio'
+        self._sort_ascending = True
+        self._update_sort_ui()
+        self._load_people()
+
+    def _on_sort_combo_selected(self, _event: tk.Event | None = None) -> None:
+        label = self._sort_combo_var.get().strip()
+        mode = _SORT_MODE_BY_LABEL.get(label)
+        if mode is None or mode == self._sort_mode:
+            return
+        self._sort_mode = mode
+        self._update_sort_ui()
+        self._load_people()
+
+    def _sort_arrow(self, mode: str) -> str:
+        if mode != self._sort_mode:
+            return ''
+        return ' ↑' if self._sort_ascending else ' ↓'
+
+    def _update_sort_ui(self) -> None:
+        label = _SORT_LABEL_BY_MODE.get(self._sort_mode, _SORT_OPTION_LABELS[0])
+        if self._sort_combo_var.get() != label:
+            self._sort_combo_var.set(label)
+        self._btn_sort_dir.configure(text='↑' if self._sort_ascending else '↓')
+        self.tree.heading('Фамилия', text=f'Фамилия{self._sort_arrow("fio")}')
+        self.tree.heading('Дата рождения', text=f'Дата рождения{self._sort_arrow("birth_year")}')
+        self.tree.heading('Дата смерти', text=f'Дата смерти{self._sort_arrow("death_year")}')
+
+    def _fio_key(self, person: Person) -> tuple[str, str, str]:
+        return (
+            (person.last_name or '').casefold(),
+            (person.first_name or '').casefold(),
+            (person.middle_name or '').casefold(),
+        )
+
+    def _partial_sort_key(self, partial: PartialDate | None) -> tuple[int, int, int, int]:
+        """Без даты — всегда в конце; направление задаётся знаком года/месяца/дня."""
+        if partial is None:
+            return (1, 0, 0, 0)
+        sign = 1 if self._sort_ascending else -1
+        return (
+            0,
+            sign * partial.year,
+            sign * (partial.month or 0),
+            sign * (partial.day or 0),
+        )
+
+    def _ordered_people(self) -> list[Person]:
+        people = list(self.db_session.execute(select(Person)).scalars().all())
+        if self._sort_mode == 'birth_year':
+            people.sort(
+                key=lambda p: (*self._partial_sort_key(_person_birth_partial(p)), *self._fio_key(p))
+            )
+        elif self._sort_mode == 'death_year':
+            people.sort(
+                key=lambda p: (*self._partial_sort_key(_person_death_partial(p)), *self._fio_key(p))
+            )
+        else:
+            people.sort(key=self._fio_key, reverse=not self._sort_ascending)
+        return people
+
     def _load_people(self) -> None:
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        stmt = select(Person).order_by(Person.last_name, Person.first_name)
-        people = self.db_session.execute(stmt).scalars().all()
-
-        for person in people:
+        for person in self._ordered_people():
             gender_str = _gender_display_raw(person.gender)
+            birth = _person_birth_partial(person)
+            death = _person_death_partial(person)
             self.tree.insert('', tk.END, values=(
                 person.id,
                 person.last_name,
                 person.first_name,
                 person.middle_name or '',
                 gender_str,
-                format_date_display(person.date_of_birth, empty='-'),
-                format_date_display(person.date_of_death, empty='-'),
+                format_date_display(birth, empty='-'),
+                format_date_display(death, empty='-'),
                 (person.biography or '')[:80] + ('…' if person.biography and len(person.biography) > 80 else ''),
             ))
 
@@ -755,7 +1231,7 @@ class GenealogyApp:
         return self.db_session.execute(stmt).scalar_one_or_none()
 
     def _add_person(self) -> None:
-        dialog = PersonDialog(self.root, 'Добавить человека', font_settings=self._font_settings)
+        dialog = PersonDialog(self.root, 'Добавить персону', font_settings=self._font_settings)
         dialog.wait_window()
 
         if dialog.result:
@@ -763,14 +1239,19 @@ class GenealogyApp:
                 first_name=dialog.result.first_name,
                 last_name=dialog.result.last_name,
                 middle_name=dialog.result.middle_name,
+                maiden_name=dialog.result.maiden_name,
                 gender=dialog.result.gender,
-                date_of_birth=dialog.result.date_of_birth,
-                date_of_death=dialog.result.date_of_death,
                 place_of_birth=dialog.result.place_of_birth,
                 place_of_death=dialog.result.place_of_death,
+                burial_place=dialog.result.burial_place,
                 death_cause=dialog.result.death_cause,
                 biography=dialog.result.biography,
                 archive_records=dialog.result.archive_records,
+            )
+            _apply_partial_to_person(
+                person,
+                dialog.result.date_of_birth,
+                dialog.result.date_of_death,
             )
             self.db_session.add(person)
             self.db_session.flush()
@@ -778,7 +1259,8 @@ class GenealogyApp:
                 self.db_session,
                 person.id,
                 dialog.result.phones,
-                dialog.result.addresses,
+                dialog.result.name_variants,
+                dialog.result.residences,
             )
             self.db_session.commit()
             self._load_people()
@@ -791,30 +1273,37 @@ class GenealogyApp:
 
         dialog = PersonDialog(
             self.root,
-            'Редактировать',
+            'Редактировать персону',
             person,
             font_settings=self._font_settings,
             phones=_load_person_phones(self.db_session, person.id),
-            addresses=_load_person_addresses(self.db_session, person.id),
+            name_variants=_load_person_name_variants(self.db_session, person.id),
+            residences=_load_person_residences(self.db_session, person.id),
         )
         dialog.wait_window()
         if dialog.result:
             person.first_name = dialog.result.first_name
             person.last_name = dialog.result.last_name
             person.middle_name = dialog.result.middle_name
+            person.maiden_name = dialog.result.maiden_name
             person.gender = dialog.result.gender
-            person.date_of_birth = dialog.result.date_of_birth
-            person.date_of_death = dialog.result.date_of_death
             person.place_of_birth = dialog.result.place_of_birth
             person.place_of_death = dialog.result.place_of_death
+            person.burial_place = dialog.result.burial_place
             person.death_cause = dialog.result.death_cause
             person.biography = dialog.result.biography
             person.archive_records = dialog.result.archive_records
+            _apply_partial_to_person(
+                person,
+                dialog.result.date_of_birth,
+                dialog.result.date_of_death,
+            )
             _save_person_contacts(
                 self.db_session,
                 person.id,
                 dialog.result.phones,
-                dialog.result.addresses,
+                dialog.result.name_variants,
+                dialog.result.residences,
             )
 
             self.db_session.commit()
@@ -845,20 +1334,24 @@ class GenealogyApp:
 
     def _clear_info_panel(self) -> None:
         self._info_name.config(text='—')
+        self._info_maiden.config(text='—')
         self._info_middle.config(text='—')
         self._info_gender.config(text='—')
         self._info_birth.config(text='—')
         self._info_birth_place.config(text='—')
         self._info_death.config(text='—')
         self._info_death_place.config(text='—')
+        self._info_burial.config(text='—')
         self._info_death_cause.config(text='—')
         self._set_info_text_widget(self._info_bio, '')
         self._set_info_text_widget(self._info_archive, '')
         self._set_info_text_widget(self._info_rels, 'Выберите человека в таблице.')
         self._set_info_text_widget(self._info_phones, '')
         self._set_info_text_widget(self._info_addresses, '')
+        self._set_info_text_widget(self._info_name_variants, '')
         self._info_phone_line_count = 1
         self._info_address_line_count = 1
+        self._info_name_variant_line_count = 1
         self._relayout_info_panel()
 
     def _manage_relationships(self) -> None:
@@ -877,41 +1370,49 @@ class GenealogyApp:
             self._clear_info_panel()
             return
 
-        rel_lines: list[str] = []
-        for _rel, other, type_key in iter_person_edges_view(self.db_session, person.id):
-            rel_lines.append(
-                f'{_rel_type_label(type_key)}: {other.last_name} {other.first_name}'
-            )
+        edges = iter_person_edges_view(self.db_session, person.id)
+        rel_text = format_relationships_grouped(edges)
 
         phones = _load_person_phones(self.db_session, person.id)
-        addresses = _load_person_addresses(self.db_session, person.id)
+        variants = _load_person_name_variants(self.db_session, person.id)
+        residences = _load_person_residences(self.db_session, person.id)
         self._info_phone_line_count = self._info_lines_for_record_count(len(phones))
-        self._info_address_line_count = self._info_lines_for_record_count(len(addresses))
+        self._info_name_variant_line_count = self._info_lines_for_record_count(len(variants))
+        self._info_address_line_count = self._info_lines_for_record_count(len(residences))
 
         fio = f'{person.last_name} {person.first_name}'.strip()
         self._info_name.config(text=fio)
+        self._info_maiden.config(text=person.maiden_name or '—')
         self._info_middle.config(text=person.middle_name or '—')
         self._info_gender.config(text=_gender_display_raw(person.gender))
-        self._info_birth.config(text=format_date_display(person.date_of_birth))
+        birth = _person_birth_partial(person)
+        death = _person_death_partial(person)
+        self._info_birth.config(text=format_date_display(birth))
         self._info_birth_place.config(text=person.place_of_birth or '—')
-        self._info_death.config(text=format_date_display(person.date_of_death))
-        if person.date_of_death:
+        self._info_death.config(text=format_date_display(death))
+        if death:
             self._info_death_place.config(text=person.place_of_death or '—')
+            self._info_burial.config(text=person.burial_place or '—')
             self._info_death_cause.config(text=_death_cause_display_raw(person.death_cause))
         else:
             self._info_death_place.config(text='—')
+            self._info_burial.config(text='—')
             self._info_death_cause.config(text='—')
         self._set_info_text_widget(self._info_bio, person.biography or '')
         self._set_info_text_widget(self._info_archive, person.archive_records or '')
+        self._set_info_text_widget(
+            self._info_name_variants,
+            '\n'.join(variants) if variants else '—',
+        )
         self._set_info_text_widget(
             self._info_phones,
             '\n'.join(phones) if phones else '—',
         )
         self._set_info_text_widget(
             self._info_addresses,
-            '\n'.join(addresses) if addresses else '—',
+            '\n'.join(format_residence_line(r) for r in residences) if residences else '—',
         )
-        self._set_info_text_widget(self._info_rels, '\n'.join(rel_lines) if rel_lines else 'Нет связей.')
+        self._set_info_text_widget(self._info_rels, rel_text if rel_text else 'Нет связей.')
         self._relayout_info_panel()
 
 
@@ -1103,6 +1604,131 @@ class MultiValuePanel(ttk.LabelFrame):
         ]
 
 
+class ResidencePanel(ttk.LabelFrame):
+    """Места жительства: сейчас / в прошлом (+ период)."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        initial: list[ResidenceData] | None = None,
+        *,
+        font_settings: UiFontSettings | None = None,
+        min_rows: int = 1,
+        max_rows: int = 5,
+        on_change: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(parent, text='Места жительства', padding=4)
+        self._min_rows = min_rows
+        self._max_rows = max_rows
+        self._on_change = on_change
+        self._items: list[ResidenceData] = []
+        font = (font_settings or UiFontSettings.load(parent)).tk_font()
+
+        list_row = ttk.Frame(self)
+        list_row.pack(fill=tk.X)
+        self._listbox = tk.Listbox(
+            list_row,
+            height=min_rows,
+            exportselection=False,
+            font=font,
+        )
+        self._scrollbar = ttk.Scrollbar(list_row, orient=tk.VERTICAL, command=self._listbox.yview)
+        self._listbox.configure(yscrollcommand=self._scrollbar.set)
+        self._listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        for item in initial or []:
+            if item.address.strip():
+                self._items.append(
+                    ResidenceData(
+                        address=item.address.strip(),
+                        kind=item.kind,
+                        period_note=(item.period_note or '').strip() or None,
+                    )
+                )
+                self._listbox.insert(tk.END, format_residence_line(self._items[-1]))
+
+        kind_row = ttk.Frame(self)
+        kind_row.pack(fill=tk.X, pady=(4, 0))
+        ttk.Label(kind_row, text='Тип:').pack(side=tk.LEFT)
+        self._kind_var = tk.StringVar(value=RESIDENCE_KIND_LABELS['current'])
+        self._kind_combo = ttk.Combobox(
+            kind_row,
+            textvariable=self._kind_var,
+            values=list(RESIDENCE_KIND_LABELS.values()),
+            state='readonly',
+            width=12,
+        )
+        self._kind_combo.pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(kind_row, text='Период:').pack(side=tk.LEFT)
+        self._period_var = tk.StringVar()
+        self._period_entry = ttk.Entry(kind_row, textvariable=self._period_var, width=16)
+        self._period_entry.pack(side=tk.LEFT, padx=(4, 0))
+        self._kind_var.trace_add('write', self._sync_period_state)
+        self._sync_period_state()
+
+        input_row = ttk.Frame(self)
+        input_row.pack(fill=tk.X, pady=(4, 0))
+        self._entry_var = tk.StringVar()
+        self._entry = ttk.Entry(input_row, textvariable=self._entry_var)
+        self._entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._entry.bind('<Return>', lambda _e: self._add_value())
+        ttk.Button(input_row, text='+', command=self._add_value, width=3).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(input_row, text='−', command=self._remove_selected, width=3).pack(
+            side=tk.LEFT, padx=(2, 0)
+        )
+
+        self._resize_list(notify=False)
+
+    def _sync_period_state(self, *_args: object) -> None:
+        kind = RESIDENCE_KIND_RU_TO_KEY.get(self._kind_var.get().strip(), 'current')
+        state = tk.NORMAL if kind == 'past' else tk.DISABLED
+        self._period_entry.configure(state=state)
+        if kind != 'past':
+            self._period_var.set('')
+
+    def _notify_change(self) -> None:
+        if self._on_change:
+            self._on_change()
+
+    def _resize_list(self, notify: bool = True) -> None:
+        count = self._listbox.size()
+        rows = min(max(self._min_rows, count), self._max_rows)
+        self._listbox.configure(height=rows)
+        if count > self._max_rows:
+            self._scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        else:
+            self._scrollbar.pack_forget()
+        if notify:
+            self._notify_change()
+
+    def _add_value(self) -> None:
+        address = self._entry_var.get().strip()
+        if not address:
+            return
+        kind = RESIDENCE_KIND_RU_TO_KEY.get(self._kind_var.get().strip(), 'current')
+        period = self._period_var.get().strip() or None if kind == 'past' else None
+        item = ResidenceData(address=address, kind=kind, period_note=period)
+        self._items.append(item)
+        self._listbox.insert(tk.END, format_residence_line(item))
+        self._entry_var.set('')
+        self._period_var.set('')
+        self._kind_var.set(RESIDENCE_KIND_LABELS['current'])
+        self._resize_list()
+
+    def _remove_selected(self) -> None:
+        selection = self._listbox.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        self._listbox.delete(idx)
+        if 0 <= idx < len(self._items):
+            del self._items[idx]
+        self._resize_list()
+
+    def get_values(self) -> list[ResidenceData]:
+        return list(self._items)
+
+
 class PersonDialog(tk.Toplevel):
     def __init__(
         self,
@@ -1112,7 +1738,8 @@ class PersonDialog(tk.Toplevel):
         *,
         font_settings: UiFontSettings | None = None,
         phones: list[str] | None = None,
-        addresses: list[str] | None = None,
+        name_variants: list[str] | None = None,
+        residences: list[ResidenceData] | None = None,
     ) -> None:
         super().__init__(parent)
         self.title(title)
@@ -1123,11 +1750,18 @@ class PersonDialog(tk.Toplevel):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self._create_widgets(person, phones or [], addresses or [])
-        self.after_idle(self._fit_window)
+        self._fitted_once = False
+        self._create_widgets(
+            person,
+            phones or [],
+            name_variants or [],
+            residences or [],
+        )
+        self.after_idle(lambda: self._fit_window(reposition=True))
 
     def _schedule_fit(self) -> None:
-        self.after_idle(self._fit_window)
+        # Только подстроить высоту/скролл — не сбрасывать позицию и ширину, заданные пользователем.
+        self.after_idle(lambda: self._fit_window(reposition=False))
 
     def _on_form_configure(self, _event: tk.Event | None = None) -> None:
         self._canvas.configure(scrollregion=self._canvas.bbox('all'))
@@ -1153,7 +1787,7 @@ class PersonDialog(tk.Toplevel):
         delta = -1 if event.num == 4 else 1
         self._canvas.yview_scroll(delta, 'units')
 
-    def _fit_window(self) -> None:
+    def _fit_window(self, *, reposition: bool | None = None) -> None:
         self.update_idletasks()
         form_h = self._form.winfo_reqheight()
         btn_h = self._btn_frame.winfo_reqheight()
@@ -1161,27 +1795,39 @@ class PersonDialog(tk.Toplevel):
         total_h = form_h + btn_h + vertical_pad
         _, sh = _screen_size(self)
         max_h = int(sh * WIN_MAX_HEIGHT_RATIO)
-        width = max(460, min(560, self.winfo_reqwidth() + 24))
+        # Шире по умолчанию: две колонки + «Примечание» / архив рядом.
+        width = max(1000, min(1120, self.winfo_reqwidth() + 48))
+        if self._fitted_once and not reposition:
+            # Сохраняем текущую ширину, если пользователь уже ресайзил окно.
+            width = max(640, self.winfo_width())
+
+        do_center = self._fitted_once is False if reposition is None else reposition
 
         if total_h <= max_h:
             self._scroll_visible = False
             self._vscroll.grid_remove()
             self._canvas.configure(height=form_h)
-            _apply_window_geometry(self, width, total_h, min_width=400, min_height=280)
+            _apply_window_geometry(
+                self, width, total_h, min_width=720, min_height=280, center=do_center
+            )
         else:
             self._scroll_visible = True
             canvas_h = max(200, max_h - btn_h - vertical_pad)
             self._canvas.configure(height=canvas_h)
             self._vscroll.grid(row=0, column=1, sticky=tk.NS)
-            _apply_window_geometry(self, width, max_h, min_width=400, min_height=280)
+            _apply_window_geometry(
+                self, width, max_h, min_width=720, min_height=280, center=do_center
+            )
 
+        self._fitted_once = True
         self._on_form_configure()
 
     def _create_widgets(
         self,
         person: Person | None,
         phones: list[str],
-        addresses: list[str],
+        name_variants: list[str],
+        residences: list[ResidenceData],
     ) -> None:
         self._scroll_visible = False
 
@@ -1203,54 +1849,117 @@ class PersonDialog(tk.Toplevel):
         self._canvas.bind('<Leave>', self._unbind_form_mousewheel)
 
         form = self._form
+        data_font = self._font_settings.tk_font()
 
-        ttk.Label(form, text='Имя:').pack(anchor=tk.W)
-        self.first_name_var = tk.StringVar(value=person.first_name if person else '')
-        ttk.Entry(form, textvariable=self.first_name_var, width=40).pack(fill=tk.X)
+        def _entry(parent: tk.Misc, textvariable: tk.StringVar, **kwargs) -> ttk.Entry:
+            widget = ttk.Entry(parent, textvariable=textvariable, font=data_font, **kwargs)
+            return widget
 
-        ttk.Label(form, text='Фамилия:').pack(anchor=tk.W, pady=(8, 0))
+        # --- две колонки: слева ФИО/даты, справа имя/места ---
+        columns = ttk.Frame(form)
+        columns.pack(fill=tk.X)
+        left = ttk.Frame(columns)
+        right = ttk.Frame(columns)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+
+        ttk.Label(left, text='Фамилия:').pack(anchor=tk.W)
         self.last_name_var = tk.StringVar(value=person.last_name if person else '')
-        ttk.Entry(form, textvariable=self.last_name_var, width=40).pack(fill=tk.X)
+        last_name_entry = _entry(left, self.last_name_var)
+        last_name_entry.pack(fill=tk.X)
 
-        ttk.Label(form, text='Отчество:').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(left, text='Девичья / прежняя фамилия:').pack(anchor=tk.W, pady=(8, 0))
+        self.maiden_name_var = tk.StringVar(
+            value=(person.maiden_name or '') if person else ''
+        )
+        maiden_entry = _entry(left, self.maiden_name_var)
+        maiden_entry.pack(fill=tk.X)
+
+        ttk.Label(right, text='Имя:').pack(anchor=tk.W)
+        self.first_name_var = tk.StringVar(value=person.first_name if person else '')
+        first_name_entry = _entry(right, self.first_name_var)
+        first_name_entry.pack(fill=tk.X)
+
+        ttk.Label(right, text='Отчество:').pack(anchor=tk.W, pady=(8, 0))
         self.middle_name_var = tk.StringVar(value=person.middle_name or '' if person else '')
-        ttk.Entry(form, textvariable=self.middle_name_var, width=40).pack(fill=tk.X)
+        middle_name_entry = _entry(right, self.middle_name_var)
+        middle_name_entry.pack(fill=tk.X)
 
-        ttk.Label(form, text='Пол:').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(left, text='Пол:').pack(anchor=tk.W, pady=(8, 0))
         if person and person.gender:
             gender_label = _gender_display_raw(person.gender)
         else:
             gender_label = GENDER_LABELS_RU[Gender.MALE.value]
         self.gender_var = tk.StringVar(value=gender_label)
-        ttk.Combobox(
-            form,
+        gender_combo = ttk.Combobox(
+            left,
             textvariable=self.gender_var,
             values=GENDER_COMBO_LABELS,
             state='readonly',
-            width=12,
-        ).pack(anchor=tk.W)
+            width=14,
+            font=data_font,
+        )
+        gender_combo.pack(anchor=tk.W)
 
-        ttk.Label(form, text=f'Дата рождения ({DATE_ENTRY_HINT}):').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(left, text='Дата рождения:').pack(anchor=tk.W, pady=(8, 0))
+        birth_partial = _person_birth_partial(person) if person else None
         self.birth_date_var = tk.StringVar(
-            value=format_date_entry(person.date_of_birth) if person and person.date_of_birth else ''
+            value=format_partial_entry(birth_partial) if birth_partial else ''
         )
-        DateMaskEntry(form, textvariable=self.birth_date_var).pack(fill=tk.X)
+        birth_entry = DateMaskEntry(left, textvariable=self.birth_date_var)
+        birth_entry.configure(font=data_font)
+        birth_entry.pack(fill=tk.X)
 
-        ttk.Label(form, text='Место рождения:').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(right, text='Место рождения:').pack(anchor=tk.W, pady=(8, 0))
         self.place_of_birth_var = tk.StringVar(value=person.place_of_birth or '' if person else '')
-        ttk.Entry(form, textvariable=self.place_of_birth_var, width=40).pack(fill=tk.X)
+        place_birth_entry = _entry(right, self.place_of_birth_var)
+        place_birth_entry.pack(fill=tk.X)
 
-        ttk.Label(form, text=f'Дата смерти ({DATE_ENTRY_HINT}, опционально):').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(left, text='Дата смерти (опционально):').pack(anchor=tk.W, pady=(8, 0))
+        death_partial = _person_death_partial(person) if person else None
         self.death_date_var = tk.StringVar(
-            value=format_date_entry(person.date_of_death) if person and person.date_of_death else ''
+            value=format_partial_entry(death_partial) if death_partial else ''
         )
-        self._death_date_entry = DateMaskEntry(form, textvariable=self.death_date_var)
+        self._death_date_entry = DateMaskEntry(left, textvariable=self.death_date_var)
+        self._death_date_entry.configure(font=data_font)
         self._death_date_entry.pack(fill=tk.X)
 
-        self._death_details = ttk.Frame(form)
-        ttk.Label(self._death_details, text='Место смерти:').pack(anchor=tk.W)
+        ttk.Label(
+            form,
+            text=DATE_INPUT_HELP,
+            foreground='gray',
+            justify=tk.LEFT,
+            wraplength=960,
+        ).pack(anchor=tk.W, pady=(6, 0))
+
+        _bind_return_to_next(last_name_entry, maiden_entry)
+        _bind_return_to_next(maiden_entry, first_name_entry)
+        _bind_return_to_next(first_name_entry, middle_name_entry)
+        _bind_return_to_next(middle_name_entry, gender_combo)
+        _bind_return_to_next(gender_combo, birth_entry)
+        _bind_return_to_next(birth_entry, place_birth_entry)
+        _bind_return_to_next(place_birth_entry, self._death_date_entry)
+
+        self._death_slot = ttk.Frame(form)
+        self._death_slot.pack(fill=tk.X)
+        self._death_details = ttk.Frame(self._death_slot)
+
+        death_cols = ttk.Frame(self._death_details)
+        death_cols.pack(fill=tk.X, pady=(8, 0))
+        death_left = ttk.Frame(death_cols)
+        death_right = ttk.Frame(death_cols)
+        death_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        death_right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10, 0))
+
+        ttk.Label(death_left, text='Место смерти:').pack(anchor=tk.W)
         self.place_of_death_var = tk.StringVar(value=person.place_of_death or '' if person else '')
-        ttk.Entry(self._death_details, textvariable=self.place_of_death_var, width=40).pack(fill=tk.X)
+        _entry(death_left, self.place_of_death_var).pack(fill=tk.X)
+
+        ttk.Label(death_right, text='Место погребения:').pack(anchor=tk.W)
+        self.burial_place_var = tk.StringVar(
+            value=(person.burial_place or '') if person else ''
+        )
+        _entry(death_right, self.burial_place_var).pack(fill=tk.X)
 
         ttk.Label(self._death_details, text='Причина смерти:').pack(anchor=tk.W, pady=(8, 0))
         if person and person.death_cause:
@@ -1264,52 +1973,64 @@ class PersonDialog(tk.Toplevel):
             values=DEATH_CAUSE_COMBO_LABELS,
             state='readonly',
             width=24,
+            font=data_font,
         ).pack(anchor=tk.W)
 
+        contacts = ttk.Frame(form)
+        contacts.pack(fill=tk.X, pady=(8, 0))
+        self._name_variants_panel = MultiValuePanel(
+            contacts,
+            'Варианты имени',
+            name_variants,
+            font_settings=self._font_settings,
+            on_change=self._schedule_fit,
+        )
+        self._name_variants_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+
         self._phones_panel = MultiValuePanel(
-            form,
+            contacts,
             'Телефоны',
             phones,
             font_settings=self._font_settings,
             on_change=self._schedule_fit,
         )
-        self._phones_panel.pack(fill=tk.X, pady=(8, 0))
+        self._phones_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
 
-        self._addresses_panel = MultiValuePanel(
+        self._residences_panel = ResidencePanel(
             form,
-            'Адреса',
-            addresses,
+            residences,
             font_settings=self._font_settings,
             on_change=self._schedule_fit,
         )
-        self._addresses_panel.pack(fill=tk.X, pady=(4, 0))
+        self._residences_panel.pack(fill=tk.X, pady=(8, 0))
 
+        # Архив и примечание друг под другом на всю ширину — иначе «Примечание» обрезается.
         ttk.Label(form, text='Архивные записи:').pack(anchor=tk.W, pady=(8, 0))
         archive_frame = ttk.Frame(form)
-        archive_frame.pack(fill=tk.X, pady=(0, 4))
+        archive_frame.pack(fill=tk.X)
         self.archive_text = tk.Text(
             archive_frame,
             height=3,
             wrap=tk.WORD,
-            font=self._font_settings.tk_font(),
+            font=data_font,
         )
-        self.archive_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.archive_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         archive_sb = ttk.Scrollbar(archive_frame, command=self.archive_text.yview)
         archive_sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.archive_text.configure(yscrollcommand=archive_sb.set)
         if person and person.archive_records:
             self.archive_text.insert('1.0', person.archive_records)
 
-        ttk.Label(form, text='Биография:').pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(form, text='Примечание:').pack(anchor=tk.W, pady=(8, 0))
         bio_frame = ttk.Frame(form)
-        bio_frame.pack(fill=tk.X, pady=(0, 4))
+        bio_frame.pack(fill=tk.X)
         self.biography_text = tk.Text(
             bio_frame,
-            height=4,
+            height=3,
             wrap=tk.WORD,
-            font=self._font_settings.tk_font(),
+            font=data_font,
         )
-        self.biography_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.biography_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb = ttk.Scrollbar(bio_frame, command=self.biography_text.yview)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.biography_text.configure(yscrollcommand=sb.set)
@@ -1325,12 +2046,12 @@ class PersonDialog(tk.Toplevel):
         ttk.Button(self._btn_frame, text='Отмена', command=self.destroy).pack(side=tk.LEFT, padx=10)
 
     def _has_complete_death_date(self) -> bool:
-        return _try_parse_date_flexible(self.death_date_var.get()) is not None
+        return try_parse_partial_date(self.death_date_var.get()) is not None
 
     def _update_death_details_visibility(self, *_args: object) -> None:
         if self._has_complete_death_date():
             if not self._death_details.winfo_ismapped():
-                self._death_details.pack(fill=tk.X, pady=(8, 0), before=self._phones_panel)
+                self._death_details.pack(fill=tk.X)
         elif self._death_details.winfo_ismapped():
             self._death_details.pack_forget()
         self._schedule_fit()
@@ -1359,9 +2080,11 @@ class PersonDialog(tk.Toplevel):
 
         if death is None:
             place_of_death = None
+            burial_place = None
             death_cause = None
         else:
             place_of_death = self.place_of_death_var.get().strip() or None
+            burial_place = self.burial_place_var.get().strip() or None
             cause_label = self.death_cause_var.get().strip()
             cause_key = DEATH_CAUSE_RU_TO_KEY.get(cause_label)
             if not cause_key:
@@ -1373,16 +2096,19 @@ class PersonDialog(tk.Toplevel):
             first_name=first_name,
             last_name=last_name,
             middle_name=self.middle_name_var.get().strip() or None,
+            maiden_name=self.maiden_name_var.get().strip() or None,
             gender=gender,
             date_of_birth=birth,
             date_of_death=death,
             place_of_birth=self.place_of_birth_var.get().strip() or None,
             place_of_death=place_of_death,
+            burial_place=burial_place,
             death_cause=death_cause,
             biography=self.biography_text.get('1.0', tk.END).strip() or None,
             archive_records=self.archive_text.get('1.0', tk.END).strip() or None,
             phones=self._phones_panel.get_values(),
-            addresses=self._addresses_panel.get_values(),
+            name_variants=self._name_variants_panel.get_values(),
+            residences=self._residences_panel.get_values(),
         )
         self.destroy()
 
@@ -1420,15 +2146,34 @@ class RelationsDialog(tk.Toplevel):
         sw, sh = _screen_size(self)
         _apply_window_geometry(
             self,
-            min(720, int(sw * 0.85)),
-            min(620, int(sh * 0.82)),
-            min_width=480,
-            min_height=360,
+            min(560, int(sw * 0.72)),
+            min(480, int(sh * 0.72)),
+            min_width=420,
+            min_height=320,
         )
 
     def _on_window_configure(self, event: tk.Event) -> None:
         if event.widget is self and hasattr(self, '_hint_label'):
             self._hint_label.configure(wraplength=max(160, event.width - 48))
+
+    def _save(self) -> None:
+        """Связи уже пишутся в БД при добавлении/удалении; кнопка фиксирует состояние."""
+        try:
+            self.db_session.commit()
+        except Exception:
+            self.db_session.rollback()
+            messagebox.showerror('Ошибка', 'Не удалось сохранить изменения', parent=self)
+            return
+        messagebox.showinfo('Сохранено', 'Изменения сохранены', parent=self)
+
+    def _save_and_close(self) -> None:
+        try:
+            self.db_session.commit()
+        except Exception:
+            self.db_session.rollback()
+            messagebox.showerror('Ошибка', 'Не удалось сохранить изменения', parent=self)
+            return
+        self._on_close()
 
     def _on_close(self) -> None:
         self.grab_release()
@@ -1479,22 +2224,24 @@ class RelationsDialog(tk.Toplevel):
         add_row = ttk.Frame(lf_add)
         add_row.pack(fill=tk.X)
         ttk.Label(add_row, text='Тип:').pack(side=tk.LEFT)
-        default_ru = REL_LABELS_RU['spouse']
+        default_ru = REL_LABELS_RU['wife']
         self.rel_type_var = tk.StringVar(value=default_ru)
         self.type_combo = ttk.Combobox(
             add_row,
             textvariable=self.rel_type_var,
             values=REL_COMBO_LABELS,
             state='readonly',
-            width=22,
+            width=18,
         )
         self.type_combo.pack(side=tk.LEFT, padx=(8, 12))
         ttk.Button(add_row, text='Добавить связь', command=self._add_relationship).pack(side=tk.LEFT)
 
         hint = (
-            'Смысл: у человека, для которого открыто окно, выбранный в списке — это '
-            '«Отец» / «Мать» / «Ребёнок» / «Супруг(а)» / «Брат или сестра» '
-            '(как в поле «Тип»). Двойной клик по строке списка тоже добавляет связь.'
+            'Смысл: у персоны, для которой открыто окно, выбранный в списке — это '
+            'её «Отец» / «Мать» / «Супруга» / «Сын» / «Брат» / «Тётя» и т.д. '
+            '(как в поле «Тип»). Пример: чтобы у Владимира появились родители, '
+            'откройте Владимира и добавьте «Мать» / «Отец». '
+            'Двойной клик по строке списка тоже добавляет связь.'
         )
         self._hint_label = ttk.Label(lf_add, text=hint, wraplength=400, foreground='gray')
         self._hint_label.pack(anchor=tk.W, pady=(6, 0))
@@ -1526,9 +2273,12 @@ class RelationsDialog(tk.Toplevel):
             foreground='gray',
         ).pack(side=tk.LEFT, padx=(12, 0))
 
-        bottom = ttk.Frame(self, padding=(10, 6, 10, 10))
+        bottom = ttk.Frame(self, padding=(10, 8, 10, 10))
         bottom.grid(row=2, column=0, sticky=tk.EW)
-        ttk.Button(bottom, text='Закрыть', command=self._on_close).pack(side=tk.RIGHT)
+        ttk.Button(bottom, text='Сохранить и закрыть', command=self._save_and_close).pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        ttk.Button(bottom, text='Сохранить', command=self._save).pack(side=tk.RIGHT)
 
         self.bind('<Configure>', self._on_window_configure, add='+')
 
@@ -1563,7 +2313,7 @@ class RelationsDialog(tk.Toplevel):
         self._edge_rows.clear()
 
         for rel, other, type_key in iter_person_edges_view(self.db_session, self.person.id):
-            label = f'{_rel_type_label(type_key)}: {other.last_name} {other.first_name}'
+            label = f'{_rel_type_label(type_key)}: {_person_short_fio(other)}'
             self.rel_listbox.insert(tk.END, label)
             self._edge_rows.append((rel, other, type_key))
 

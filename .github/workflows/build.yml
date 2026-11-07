@@ -120,15 +120,12 @@ jobs:
           Copy-Item -Recurse -Path data -Destination installer-package/
           
           # Create README
-          $readme = @"
-# Family Tree Setup
-
-Installation Instructions:
-1. Copy all files from this folder to your desired location
-2. Run family_tree.exe for desktop application
-3. Run family_tree_web.exe for web interface (starts on http://localhost:8000)
-"@
-          Set-Content -Path installer-package/README.txt -Value $readme
+          echo "# Family Tree Setup" > installer-package/README.txt
+          echo "" >> installer-package/README.txt
+          echo "Installation Instructions:" >> installer-package/README.txt
+          echo "1. Copy all files from this folder to your desired location" >> installer-package/README.txt
+          echo "2. Run family_tree.exe for desktop application" >> installer-package/README.txt
+          echo "3. Run family_tree_web.exe for web interface (starts on http://localhost:8000)" >> installer-package/README.txt
       
       - name: Upload installer package
         uses: actions/upload-artifact@v4

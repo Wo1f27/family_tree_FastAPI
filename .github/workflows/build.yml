@@ -38,7 +38,20 @@ jobs:
             --hidden-import "models" \
             --hidden-import "database" \
             --hidden-import "dates" \
+            --noconfirm \
             main.py
+        shell: bash
+      
+      - name: Verify build output
+        run: |
+          echo "Checking dist directory:"
+          ls -la dist/ || echo "dist directory not found"
+          if [ -f dist/family_tree.exe ]; then
+            echo "SUCCESS: family_tree.exe found"
+          else
+            echo "ERROR: family_tree.exe not found"
+            exit 1
+          fi
         shell: bash
       
       - name: Upload desktop artifact
@@ -46,6 +59,7 @@ jobs:
         with:
           name: desktop-exe
           path: dist/family_tree.exe
+          retention-days: 7
 
   build-web:
     runs-on: windows-latest
@@ -84,7 +98,20 @@ jobs:
             --hidden-import "familytree.api.v1.endpoints.pages" \
             --hidden-import "familytree.api.v1.endpoints.persons" \
             --hidden-import "familytree.schemas.person" \
+            --noconfirm \
             src/familytree/main.py
+        shell: bash
+      
+      - name: Verify build output
+        run: |
+          echo "Checking dist directory:"
+          ls -la dist/ || echo "dist directory not found"
+          if [ -f dist/family_tree_web.exe ]; then
+            echo "SUCCESS: family_tree_web.exe found"
+          else
+            echo "ERROR: family_tree_web.exe not found"
+            exit 1
+          fi
         shell: bash
       
       - name: Upload web artifact
@@ -92,6 +119,7 @@ jobs:
         with:
           name: web-exe
           path: dist/family_tree_web.exe
+          retention-days: 7
 
   create-installer:
     needs: [build-desktop, build-web]

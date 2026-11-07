@@ -5,8 +5,8 @@ import os
 
 block_cipher = None
 
-# Get absolute paths
-base_dir = os.path.dirname(os.path.abspath(__file__))
+# Get absolute paths - use os.getcwd() for spec files
+base_dir = os.getcwd()
 src_dir = os.path.join(base_dir, 'src')
 
 a = Analysis(

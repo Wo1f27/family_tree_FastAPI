@@ -103,8 +103,8 @@ jobs:
             --hidden-import "familytree.schemas.person" \
             --noconfirm \
             src/familytree/main.py
-        shell: bash
           ls -la dist/
+        shell: bash
       
       - name: Verify build output
         run: |

@@ -18,17 +18,16 @@ jobs:
           python-version: '3.13'
       
       - name: Install uv
-        run: |
-          (Invoke-WebRequest -Uri https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip -UseBasicParsing).Content | Out-File uv.zip
-          Expand-Archive -Path uv.zip -DestinationPath $env:USERPROFILE\.local\bin -Force
-          $env:Path += ";$env:USERPROFILE\.local\bin"
-        shell: pwsh
+        run: pip install uv
+        shell: bash
       
       - name: Create virtual environment
         run: uv venv
+        shell: bash
       
       - name: Install dependencies
         run: uv pip install pyinstaller
+        shell: bash
       
       - name: Build desktop executable
         run: |
@@ -40,6 +39,7 @@ jobs:
             --hidden-import "database" \
             --hidden-import "dates" \
             main.py
+        shell: bash
       
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v4
@@ -58,17 +58,16 @@ jobs:
           python-version: '3.13'
       
       - name: Install uv
-        run: |
-          (Invoke-WebRequest -Uri https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip -UseBasicParsing).Content | Out-File uv.zip
-          Expand-Archive -Path uv.zip -DestinationPath $env:USERPROFILE\.local\bin -Force
-          $env:Path += ";$env:USERPROFILE\.local\bin"
-        shell: pwsh
+        run: pip install uv
+        shell: bash
       
       - name: Create virtual environment
         run: uv venv
+        shell: bash
       
       - name: Install dependencies
         run: uv pip install fastapi uvicorn sqlalchemy pydantic pydantic-settings jinja2 python-multipart pyinstaller
+        shell: bash
       
       - name: Build web executable
         run: |
@@ -86,6 +85,7 @@ jobs:
             --hidden-import "familytree.api.v1.endpoints.persons" \
             --hidden-import "familytree.schemas.person" \
             src/familytree/main.py
+        shell: bash
       
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -113,13 +113,10 @@ jobs:
       
       - name: Create installer package
         run: |
-          # Create installer directory structure
-          New-Item -ItemType Directory -Path installer-package -Force
-          Copy-Item artifacts/desktop/family_tree.exe installer-package/
-          Copy-Item artifacts/web/family_tree_web.exe installer-package/
-          Copy-Item -Recurse -Path data -Destination installer-package/
-          
-          # Create README
+          mkdir -p installer-package
+          cp artifacts/desktop/family_tree.exe installer-package/
+          cp artifacts/web/family_tree_web.exe installer-package/
+          cp -r data installer-package/
           echo "# Family Tree Setup" > installer-package/README.txt
           echo "" >> installer-package/README.txt
           echo "Installation Instructions:" >> installer-package/README.txt

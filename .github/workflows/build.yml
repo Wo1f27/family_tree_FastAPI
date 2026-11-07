@@ -88,23 +88,12 @@ jobs:
       - name: Build web executable
         run: |
           uv run pyinstaller \
-            --onefile \
-            --name "family_tree_web" \
-            --add-data "src/familytree/templates;familytree/templates" \
-            --add-data "src/familytree/static;familytree/static" \
-            --add-data "src/familytree;familytree" \
-            --hidden-import "familytree.main" \
-            --hidden-import "familytree.core.database" \
-            --hidden-import "familytree.core.config" \
-            --hidden-import "familytree.core.templates" \
-            --hidden-import "familytree.infrastructure.db.models" \
-            --hidden-import "familytree.infrastructure.db.repositories.person_repo" \
-            --hidden-import "familytree.api.v1.endpoints.pages" \
-            --hidden-import "familytree.api.v1.endpoints.persons" \
-            --hidden-import "familytree.schemas.person" \
-            --noconfirm \
-            src/familytree/main.py
+            --specpath . \
+            web.spec
           ls -la dist/
+          if [ -d dist/family_tree_web ]; then
+            ls -la dist/family_tree_web/
+          fi
         shell: bash
       
       - name: Verify build output

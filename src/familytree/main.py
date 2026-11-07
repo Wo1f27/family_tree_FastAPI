@@ -22,9 +22,11 @@ def get_resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller"""
     if getattr(sys, 'frozen', False):
         # Running as compiled executable - _MEIPASS points to temp extraction dir
-        base_path = Path(os.environ.get('_MEIPASS', Path.home()))
+        base_path = Path(sys._MEIPASS)
         full_path = base_path / relative_path
-        print(f"PyInstaller mode: looking for {full_path}")
+        print(f"PyInstaller mode: _MEIPASS={base_path}")
+        print(f"Looking for: {full_path}")
+        print(f"Exists: {full_path.exists()}")
         return full_path
     # Running in development
     return Path(__file__).resolve().parent / relative_path
@@ -44,6 +46,8 @@ app.add_middleware(
 # Static files - use resource path for PyInstaller
 static_dir = get_resource_path("familytree/static")
 print(f"Static directory: {static_dir} (exists: {static_dir.exists()})")
+if not static_dir.exists():
+    raise RuntimeError(f"Static directory not found: {static_dir}")
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Init DB (must be called after models are imported)

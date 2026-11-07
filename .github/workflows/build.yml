@@ -92,6 +92,7 @@ jobs:
             --name "family_tree_web" \
             --add-data "src/familytree/templates;familytree/templates" \
             --add-data "src/familytree/static;familytree/static" \
+            --add-data "src/familytree;familytree" \
             --hidden-import "familytree.main" \
             --hidden-import "familytree.core.database" \
             --hidden-import "familytree.core.config" \

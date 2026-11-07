@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
+import os
+import sys
 import threading
 import time
 import webbrowser
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 from familytree.core.database import engine, init_db
 from familytree.core.config import settings
 from familytree.api.v1.endpoints import pages, persons
+
+# PyInstaller compatibility
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable - _MEIPASS points to temp extraction dir
+        base_path = Path(os.environ.get('_MEIPASS', Path.home()))
+        full_path = base_path / relative_path
+        print(f"PyInstaller mode: looking for {full_path}")
+        return full_path
+    # Running in development
+    return Path(__file__).resolve().parent / relative_path
+
 
 app = FastAPI(title="Family Tree Web", version="0.1.0")
 
@@ -26,8 +41,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files
-static_dir = Path(__file__).parent / "static"
+# Static files - use resource path for PyInstaller
+static_dir = get_resource_path("familytree/static")
+print(f"Static directory: {static_dir} (exists: {static_dir.exists()})")
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Init DB (must be called after models are imported)

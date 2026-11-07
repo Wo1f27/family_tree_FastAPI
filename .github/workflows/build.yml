@@ -31,7 +31,8 @@ jobs:
       
       - name: Build desktop executable
         run: |
-          uv run pyinstaller --clean \
+          uv run pyinstaller \
+            --onefile \
             --name "family_tree" \
             --add-data "data;data" \
             --hidden-import "gui" \
@@ -40,6 +41,7 @@ jobs:
             --hidden-import "dates" \
             --noconfirm \
             main.py
+          ls -la dist/
         shell: bash
       
       - name: Verify build output
@@ -85,7 +87,8 @@ jobs:
       
       - name: Build web executable
         run: |
-          uv run pyinstaller --clean \
+          uv run pyinstaller \
+            --onefile \
             --name "family_tree_web" \
             --add-data "src/familytree/templates;familytree/templates" \
             --add-data "src/familytree/static;familytree/static" \
@@ -101,6 +104,7 @@ jobs:
             --noconfirm \
             src/familytree/main.py
         shell: bash
+          ls -la dist/
       
       - name: Verify build output
         run: |

@@ -10,6 +10,15 @@
     </div>
 </div>
 
+<div class="action-buttons">
+    <button class="btn btn-primary" data-open-modal="modal-person">
+        <span class="btn-icon">➕</span> Добавить персону
+    </button>
+    <button class="btn btn-secondary" data-open-modal="modal-surname">
+        <span class="btn-icon">📝</span> Добавить фамилию
+    </button>
+</div>
+
 <div class="person-list">
     {% for person in persons %}
     <div class="person-card" data-person-id="{{ person.id }}">

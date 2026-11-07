@@ -17,22 +17,27 @@ jobs:
         with:
           python-version: '3.13'
       
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Create virtual environment
+        run: uv venv
+      
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
+        run: uv pip install pyinstaller
       
       - name: Build desktop executable
+        shell: bash
         run: |
-          pyinstaller --onefile ^
-            --name "family_tree" ^
-            --icon "installer/icon.ico" ^
-            --add-data "data;data" ^
-            --add-data "gui.py;." ^
-            --add-data "models.py;." ^
-            --add-data "database.py;." ^
-            --add-data "dates.py;." ^
+          pyinstaller --clean \
+            --name "family_tree" \
+            --add-data "data;data" \
+            --hidden-import "gui" \
+            --hidden-import "models" \
+            --hidden-import "database" \
+            --hidden-import "dates" \
             main.py
       
       - name: Upload desktop artifact
@@ -51,21 +56,36 @@ jobs:
         with:
           python-version: '3.13'
       
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      
+      - name: Create virtual environment
+        run: uv venv
+      
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-          pip install fastapi uvicorn sqlalchemy pydantic jinja2
+        run: uv pip install fastapi uvicorn sqlalchemy pydantic pydantic-settings jinja2 python-multipart
+      
+      - name: Install PyInstaller
+        run: uv pip install pyinstaller
       
       - name: Build web executable
+        shell: bash
         run: |
-          pyinstaller --onefile ^
-            --name "family_tree_web" ^
-            --icon "installer/icon.ico" ^
-            --add-data "src/familytree/templates;familytree/templates" ^
-            --add-data "src/familytree/static;familytree/static" ^
-            --add-data "src/familytree;familytree" ^
+          pyinstaller --clean \
+            --name "family_tree_web" \
+            --add-data "src/familytree/templates:familytree/templates" \
+            --add-data "src/familytree/static:familytree/static" \
+            --hidden-import "familytree.main" \
+            --hidden-import "familytree.core.database" \
+            --hidden-import "familytree.core.config" \
+            --hidden-import "familytree.core.templates" \
+            --hidden-import "familytree.infrastructure.db.models" \
+            --hidden-import "familytree.infrastructure.db.repositories.person_repo" \
+            --hidden-import "familytree.api.v1.endpoints.pages" \
+            --hidden-import "familytree.api.v1.endpoints.persons" \
+            --hidden-import "familytree.schemas.person" \
             src/familytree/main.py
       
       - name: Upload web artifact
@@ -92,51 +112,26 @@ jobs:
           name: web-exe
           path: artifacts/web
       
-      - name: Create installer with Inno Setup
+      - name: Create installer package
+        shell: bash
         run: |
           # Create installer directory structure
-          mkdir installer-build
-          cp artifacts/desktop/family_tree.exe installer-build/
-          cp artifacts/web/family_tree_web.exe installer-build/
+          mkdir installer-package
+          cp artifacts/desktop/family_tree.exe installer-package/
+          cp artifacts/web/family_tree_web.exe installer-package/
+          cp -r data installer-package/
           
-          # Create Inno Setup script
-          cat > installer-build/setup.iss << 'EOF'
-          [Setup]
-          AppName=Family Tree
-          AppVersion={{VERSION}}
-          DefaultDirName={pf}\FamilyTree
-          DefaultGroupName=Family Tree
-          OutputDir=installer-output
-          OutputBaseFilename=family_tree_setup
-          Compression=lzma
-          SolidCompression=yes
-          
-          [Files]
-          Source: "family_tree.exe"; DestDir: "{app}"; Flags: ignoreversion
-          Source: "family_tree_web.exe"; DestDir: "{app}"; Flags: ignoreversion
-          
-          [Icons]
-          Name: "{group}\Family Tree"; Filename: "{app}\family_tree.exe"
-          Name: "{group}\Open Web Interface"; Filename: "{app}\family_tree_web.exe"
-          Name: "{userdesktop}\Family Tree"; Filename: "{app}\family_tree.exe"
-          
-          [Run]
-          Filename: "{app}\family_tree.exe"; Description: "Launch Family Tree"; Flags: nowait postinstall skipifsilent
-          EOF
-          
-          # Replace version placeholder
-          sed -i "s/{{VERSION}}/${{ github.ref_name }}/g" installer-build/setup.iss
-          
-          # Run Inno Setup (if available)
-          if command -v iscc &> /dev/null; then
-            iscc installer-build/setup.iss
-          else
-            echo "Inno Setup not found, creating manual installer script"
-            echo "Please run: iscc installer-build/setup.iss"
-          fi
+          # Create README
+          echo "# Family Tree Setup" > installer-package/README.txt
+          echo "" >> installer-package/README.txt
+          echo "Installation Instructions:" >> installer-package/README.txt
+          echo "1. Copy all files from this folder to your desired location" >> installer-package/README.txt
+          echo "2. Run family_tree.exe for desktop application" >> installer-package/README.txt
+          echo "3. Run family_tree_web.exe for web interface (starts on http://localhost:8000)" >> installer-package/README.txt
       
-      - name: Upload installer
+      - name: Upload installer package
         uses: actions/upload-artifact@v4
         with:
-          name: installer
-          path: installer-build/
+          name: family-tree-package
+          path: installer-package/
+          retention-days: 14

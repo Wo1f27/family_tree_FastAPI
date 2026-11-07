@@ -87,9 +87,7 @@ jobs:
       
       - name: Build web executable
         run: |
-          uv run pyinstaller \
-            --specpath . \
-            web.spec
+          uv run pyinstaller --clean web.spec
           ls -la dist/
           if [ -d dist/family_tree_web ]; then
             ls -la dist/family_tree_web/

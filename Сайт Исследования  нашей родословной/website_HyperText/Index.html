@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!--(доктайп)(Document Type Declaration — определение типа документа) Структура 
+HTML кода.  -->
+<html lang="ru">
+<!-- псевдокласс с его помощью определяется язык кода-->
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Глав_snip</title>
+	<script src="js/cloc_obrazec.js"></script>
+	<!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous"> -->
+	<link rel="stylesheet" href="styles/menu_obrazec.css">
+</head>
+<body>
+	<header class="header">
+		<div class="time">
+			<h1>Электронные часы</h1>
+			<div style="color: rgb(6, 1, 32); font: 2em sans-serif;" id="clock"></div>
+		</div>
+
+		<h2>Главная страница</h2>
+
+	</header>
+
+	<nav>
+		<ul>
+			<li><a href="Index.html">Глав_snip</a></li>
+			<li><a href="HTML.html">HTML</a></li>
+			<li><a href="VS Code.html">VS Code</a></li>
+			<li><a href="PoCSS.html">PoCSS</a></li>
+			<li><a href="Flex.html">Flex</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства Flex</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="img_doc.html">img_doc</a></li>
+			<li><a href="CEO.html">CEO</a></li>
+			<li><a href="examples.html">Примеры</a></li>
+			<li><a href="words_and_translation.html">Словарь</a></li>
+		</ul>
+	</nav>
+	<main>
+	С помощью элемента meta> можно запретить или разрешить индексацию веб-страницы поисковыми машинами:
+
+Индексация и переход по ссылкам разрешены:
+
+meta name="robots" content="index, follow">
+HTML
+Индексация разрешена, переход по ссылкам запрещен:
+
+meta name="robots" content="index, nofollow">
+HTML
+Индексация и переход по ссылкам запрещены:
+
+meta name="robots" content="noindex, nofollow">
+
+Для автоматической перезагрузки страницы через заданный промежуток времени (например, через 30 секунд) нужно воспользоваться значением refresh:<meta http-equiv="refresh" content="30">
+Чтобы перебросить посетителя на другую страницу, нужно указать URL-адрес в параметре url:<meta http-equiv="refresh" content="0; url=http://yandex.ru/">
+
+
+
+
+		<section class="R">
+			<!--      создаем раздел, он не видимый, но семантика для СЕО более приятна-->
+			
+				<h3>В этом ГИПЕРтексте все мои записи по WEB - программированию и настройке редактора VS Code, CEO и
+					перспективам сайтостроительства, словарь терминов c переводом и произношением</h3>
+
+				
+			
+		</section>
+		<!-- <div class="row">    создали контейнер для вычислений делит на 12 частей и далее <div class="one about  col-sm-3" >  под размер мониторов, в данном случае 3, то есть столбцы --они обязательно должны находиться в строке, а строка в контейнере-->
+		<section class="main-steps">
+			<p>Все веб-сервера, по умолчанию, выдают браузеру стартовую страницу index.html. Считается хорошей практикой
+				сохранять код главной страницы сайта именно под этим именем. Это правило работает в 99% случаев.</p>
+		</section>
+		<p>
+		<h3>единицы измерения</h3>
+		1.0em=10px; 1.1em=11px; 2em=20px; 5em=50px;<br>
+		В CSS3 были добавлены новые относительные единицы измерения, такие как vh, vw, vmin, vmax. Эти единицы вычисляются
+		относительно размеров окна браузера. Для настольных компьютеров ширина окна браузера больше ширины области просмотра
+		(добавляется ширина скроллбара), поэтому если для элемента установить ширину 100vw, то он выйдет за пределы html.
+		<br>
+
+
+		</p>
+	</div>
+
+	<div class="footer">
+		<p>&copy Владимир Стрелков, 2023</p>
+	</div>
+
+	<!-- <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script> -->
+	<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+		integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+		crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"
+		integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+"
+		crossorigin="anonymous"></script>
+</body>
+
+</html>

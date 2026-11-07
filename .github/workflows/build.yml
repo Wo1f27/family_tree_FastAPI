@@ -1,0 +1,142 @@
+name: Build Family Tree
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Build desktop executable
+        run: |
+          pyinstaller --onefile ^
+            --name "family_tree" ^
+            --icon "installer/icon.ico" ^
+            --add-data "data;data" ^
+            --add-data "gui.py;." ^
+            --add-data "models.py;." ^
+            --add-data "database.py;." ^
+            --add-data "dates.py;." ^
+            main.py
+      
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-exe
+          path: dist/family_tree.exe
+
+  build-web:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+          pip install fastapi uvicorn sqlalchemy pydantic jinja2
+      
+      - name: Build web executable
+        run: |
+          pyinstaller --onefile ^
+            --name "family_tree_web" ^
+            --icon "installer/icon.ico" ^
+            --add-data "src/familytree/templates;familytree/templates" ^
+            --add-data "src/familytree/static;familytree/static" ^
+            --add-data "src/familytree;familytree" ^
+            src/familytree/main.py
+      
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-exe
+          path: dist/family_tree_web.exe
+
+  create-installer:
+    needs: [build-desktop, build-web]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download desktop artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-exe
+          path: artifacts/desktop
+      
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-exe
+          path: artifacts/web
+      
+      - name: Create installer with Inno Setup
+        run: |
+          # Create installer directory structure
+          mkdir installer-build
+          cp artifacts/desktop/family_tree.exe installer-build/
+          cp artifacts/web/family_tree_web.exe installer-build/
+          
+          # Create Inno Setup script
+          cat > installer-build/setup.iss << 'EOF'
+          [Setup]
+          AppName=Family Tree
+          AppVersion={{VERSION}}
+          DefaultDirName={pf}\FamilyTree
+          DefaultGroupName=Family Tree
+          OutputDir=installer-output
+          OutputBaseFilename=family_tree_setup
+          Compression=lzma
+          SolidCompression=yes
+          
+          [Files]
+          Source: "family_tree.exe"; DestDir: "{app}"; Flags: ignoreversion
+          Source: "family_tree_web.exe"; DestDir: "{app}"; Flags: ignoreversion
+          
+          [Icons]
+          Name: "{group}\Family Tree"; Filename: "{app}\family_tree.exe"
+          Name: "{group}\Open Web Interface"; Filename: "{app}\family_tree_web.exe"
+          Name: "{userdesktop}\Family Tree"; Filename: "{app}\family_tree.exe"
+          
+          [Run]
+          Filename: "{app}\family_tree.exe"; Description: "Launch Family Tree"; Flags: nowait postinstall skipifsilent
+          EOF
+          
+          # Replace version placeholder
+          sed -i "s/{{VERSION}}/${{ github.ref_name }}/g" installer-build/setup.iss
+          
+          # Run Inno Setup (if available)
+          if command -v iscc &> /dev/null; then
+            iscc installer-build/setup.iss
+          else
+            echo "Inno Setup not found, creating manual installer script"
+            echo "Please run: iscc installer-build/setup.iss"
+          fi
+      
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: installer-build/

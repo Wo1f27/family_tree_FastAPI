@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Семейное древо{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/Style.css">
+    <link rel="stylesheet" href="/static/css/crud.css">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% include "components/_header.html" %}
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+    </div>
+    
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    
+    {% include "components/_footer.html" %}
+    
+    <!-- Modal: Add/Edit Person -->
+    <div id="modal-person" class="modal-backdrop" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 id="modal-person-title">Добавить персону</h2>
+                <button class="modal-close" onclick="FamilyTree.closeAllModals()">&times;</button>
+            </div>
+            
+            <form id="person-form" class="person-form">
+                <div class="form-grid">
+                    <!-- Basic Information -->
+                    <div class="form-section">
+                        <h3>Основная информация</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="last_name">Фамилия *</label>
+                                <input type="text" id="last_name" name="last_name" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="first_name">Имя *</label>
+                                <input type="text" id="first_name" name="first_name" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="middle_name">Отчество</label>
+                                <input type="text" id="middle_name" name="middle_name">
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="maiden_name">Девичья фамилия</label>
+                                <input type="text" id="maiden_name" name="maiden_name">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Пол *</label>
+                                <div class="radio-group">
+                                    <label class="radio-label">
+                                        <input type="radio" name="gender" value="male" required>
+                                        <span>Мужской</span>
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="gender" value="female" required>
+                                        <span>Женский</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Birth Information -->
+                    <div class="form-section">
+                        <h3>Дата рождения</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="birth_year">Год</label>
+                                <input type="number" id="birth_year" name="birth_year" min="1" max="9999">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="birth_month">Месяц</label>
+                                <input type="number" id="birth_month" name="birth_month" min="1" max="12">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="birth_day">День</label>
+                                <input type="number" id="birth_day" name="birth_day" min="1" max="31">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="birth_approx" name="birth_approx">
+                                    <span>Приблизительно</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="place_of_birth">Место рождения</label>
+                            <input type="text" id="place_of_birth" name="place_of_birth">
+                        </div>
+                    </div>
+                    
+                    <!-- Death Information -->
+                    <div class="form-section">
+                        <h3>Дата смерти</h3>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="death_year">Год</label>
+                                <input type="number" id="death_year" name="death_year" min="1" max="9999">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="death_month">Месяц</label>
+                                <input type="number" id="death_month" name="death_month" min="1" max="12">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="death_day">День</label>
+                                <input type="number" id="death_day" name="death_day" min="1" max="31">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="death_approx" name="death_approx">
+                                    <span>Приблизительно</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="place_of_death">Место смерти</label>
+                                <input type="text" id="place_of_death" name="place_of_death">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="burial_place">Место захоронения</label>
+                                <input type="text" id="burial_place" name="burial_place">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="death_cause">Причина смерти</label>
+                            <select id="death_cause" name="death_cause">
+                                <option value="">Не указана</option>
+                                <option value="natural">Естественные причины</option>
+                                <option value="illness">Болезнь</option>
+                                <option value="other">Другое</option>
+                                <option value="unknown">Неизвестна</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Information -->
+                    <div class="form-section">
+                        <h3>Дополнительная информация</h3>
+                        
+                        <div class="form-group">
+                            <label for="biography">Биография</label>
+                            <textarea id="biography" name="biography" rows="4"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="archive_records">Записи в архивах</label>
+                            <textarea id="archive_records" name="archive_records" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <span class="btn-icon">💾</span> Сохранить
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-lg" onclick="FamilyTree.closeAllModals()">
+                        Отмена
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Modal: Confirm Delete -->
+    <div id="modal-confirm-delete" class="modal-backdrop" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Подтверждение удаления</h2>
+            </div>
+            <div class="modal-body">
+                <p id="delete-message">Вы уверены, что хотите удалить эту персону?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
+                <button class="btn btn-secondary" onclick="FamilyTree.closeAllModals()">Отмена</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/crud.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Flex</title>
+	<!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous"> -->
+	<script src="js/cloc_obrazec.js"></script>
+	<link rel="stylesheet" href="styles/menu_obrazec.css">
+</head>
+
+<body>
+	<header class="header">
+		<div class="time">
+			<h1>Электронные часы</h1>
+			<div style="color: rgb(6, 1, 32); font: 2em sans-serif;" id="clock"></div>
+		</div>
+
+		<h2>Flex</h2>
+
+	</header>
+	<nav>
+		<ul>
+			<li><a href="Index.html">Глав_snip</a></li>
+			<li><a href="HTML.html">HTML</a>
+				<ul>
+					<li><a href="#">Основные теги</a></li>
+					<li><a href="text_formatting.html">Теги форматирования</a></li>
+					<li><a href="Теги СЕМАНТИЧЕСКИЕ.html">Семантические теги</a></li>
+					<li><a href="img_doc.html">img_doc</a></li>
+					<li><a href="#">Теги формы</a></li>
+				</ul>
+			</li>
+			<li><a href="VS Code.html">VS Code</a></li>
+			<li><a href="PoCSS.html">PoCSS</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства CSS</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="Flex.html">Flex</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства Flex</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			
+			<li><a href="CEO.html">CEO</a></li>
+			<li><a href="examples.html">Примеры</a>
+				<ul>
+					<li><a href="Flex свойства.html">Разделение div на две колонки</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="words_and_translation.html">Словарь</a></li>
+		</ul>
+	</nav>
+	<main>
+		<a href="https://thecode.media/flexbox-css/">:Журнал КОД_Полное руководство по Flexbox</a>
+		<section class="general">
+			<p>Чтобы включить Flexbox, достаточно задать родительскому элементу: display: flex;
+				
+			</p>
+			<div class="svojstva">
+				<p style="text-transform: lowercase;"> (стиль к параграфу - первая буква становится строчной) = Flex-container
+					блоку устанавливает правило: display:flex сам контейнер
+					внешне ведет себя как обычный строчный блок, но занимает столько пространства, сколько требкется
+				</p> <br>
+				<p>Правило Displey: block - заставляет элемент вести себя как блочный. Например ссылка а становится блоком, но
+					остается ссылкой и применяем ее кнопке. Можно &ltp&gt обернуть в Div и управлять размерами и расположением.
+				</p>
+				<p>Правило Displey: direction (флекс- дайэрекшен) - направление изгиба
+				</p>
+				<p>rows - оболочка для колонок</p>
+<p>row - строка  братная (flex-direcction:row)</p>
+<p>justify- content - обоснование содержание выравнивает вдоль главной оси (start, space-aurond, spacw-between, space-evenly)</p>
+				<p style="text-indent: 50px;">CSS свойство flex-wrap (css3) (Перевод перенос перенос) определяет, будет ли флекс
+					контейнер <strong>однострочным, или многострочным.</strong> По умолчанию контейнер является однострочным, для
+					многострочных контейнеров допускается контролировать направление, в котором размещаются флекс элементы.
+				</p>
+				<p>
+					Обращаю Ваше внимание, если элемент не является флекс элементом (не находится внутри родительского элемента,
+					который является блочным, или строчным флекс контейнером), то свойство flex-wrap (css3) не окажет на такой элемент никакого эффекта.
+				</p>
+				<p style="text-align: justify;">Flexbox это одномерные макеты, а Grid это двумерные.
+
+					Это означает, что если вы раскладываете объекты в одном направлении, к примеру, три кнопки в header, то вам
+					нужно пользоваться Flexbox.Это даст вам больше гибкости, чем CSS Grid. Также это будет легче поддерживать и
+					будет меньше кода.
+
+					Но если вы собираетесь создать целый макет в двух измерениях как с row, так и с column — то вам нужно
+					использовать CSS Grid.В этом случае с помощью CSS Grid вы получите большую гибкость и ваша разметка будет
+					проще, а код станет понятнее для дальнейшей поддержки.
+
+					Теперь вы, конечно же, можете комбинировать оба метода. В примере выше было бы идеально использовать Grid для
+					всего макета, а затем Flexbox для выравнивания контента внутри header. Таким образом, вы воспользуетесь лучшим
+					от двух «взглядов на мир». И вы увидите как именно это сделать ближе к концу статьи<img
+						src="images/Флексы и гриды.png" alt="Рисунок схема" width="50%"></p>
+				</p>
+				<p></p>
+			</div>
+		</section>
+	</main>
+</body>
+
+</html>

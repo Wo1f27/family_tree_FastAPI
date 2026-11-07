@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Галерея фотографий — Семейное древо{% endblock %}
+
+{% block content %}
+<h1>Галерея фотографий</h1>
+
+<main>
+    <div class="gallery-grid">
+        {% for photo in photos %}
+            <div class="gallery-item">
+                <img src="{{ photo }}" alt="Фото" class="gallery-img">
+            </div>
+        {% else %}
+            <p>Фотографии пока не добавлены</p>
+        {% endfor %}
+    </div>
+</main>
+
+<!-- Модальное окно -->
+<div class="modal" id="photoModal">
+    <img id="modalImg" class="modal-img" src="" alt="">
+</div>
+
+{% block extra_js %}
+<script>
+    const modal = document.getElementById('photoModal');
+    const modalImg = document.getElementById('modalImg');
+    const galleryImgs = document.querySelectorAll('.gallery-img');
+
+    galleryImgs.forEach(img => {
+        img.addEventListener('click', () => {
+            modalImg.src = img.src;
+            modal.classList.add('active');
+        });
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
+    });
+</script>
+{% endblock %}
+{% endblock %}

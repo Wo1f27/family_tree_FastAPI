@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Сайт исследования нашей родословной{% endblock %}
+
+{% block content %}
+<h1>Сайт исследования нашей родословной</h1>
+
+<main>
+    <img class="my" src="/static/img/mama%20i%20papa.png" alt="фото">
+    <img src="/static/img/картинка прародители.jpg" alt="Картинка прародители">
+    <p> Для того, чтобы родиться нам нужно:
+        2 - родителей;<br>
+        4 - бабушки и дедушки;<br>
+        8 - прабабушек и дедушек;<br>
+        16 - прапрадедушек и бабушек;<br>
+        32 - тетра-бабушек и дедушек;<br>
+        64 - пента-бабушек и дедушек;<br>
+        128 - нexa-бабушек и дедушек;<br>
+        256 - гепта-бабушек и дедушек;<br>
+        512 - окта-бабушек и дедушек;<br>
+        1024 - нона-бабушек и дедушек;<br>
+        2048 - дека-бабушек и дедушек;<br>
+        Всего за последние 11 поколений нужно 4094 предка, и все это примерно за 300 лет до того, как мы с вами
+        родились!<br>
+        Остановитесь на мгновение и подумайте...<br>
+        Сколько это судеб, характеров, жизненных побед и поражений.<br>
+        Мы должны чувствовать благодарность и любовь ко всем нашим предкам, потому что каждый из них в каждом из
+        нас!<br>
+    </p>
+
+    <hr class="dashed-line">
+
+    <!-- Person Management Section -->
+    <section class="person-management">
+        <div class="section-header">
+            <h2>Управление персонами</h2>
+            <button class="btn btn-primary" data-open-modal="modal-person">
+                <span class="btn-icon">➕</span> Добавить персону
+            </button>
+        </div>
+        
+        <div class="person-list">
+            {% if persons %}
+                {% for person in persons %}
+                <div class="person-card" data-person-id="{{ person.id }}">
+                    <div class="main-photo-wrapper">
+                        <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+                    </div>
+                    
+                    <h3>{{ person.last_name }} {{ person.first_name }}{% if person.middle_name %} {{ person.middle_name }}{% endif %}{% if person.maiden_name %} (дев.{{ person.maiden_name }}){% endif %}</h3>
+                    <p class="person-meta">
+                        {% if person.birth_year %}
+                            {% if person.birth_approx %}ок. {% endif %}{{ person.birth_year }} г.{% if person.birth_month %} — {% endif %}
+                        {% endif %}
+                        {% if person.death_year %}
+                            {% if person.death_approx %}ок. {% endif %}{{ person.death_year }} г.
+                        {% endif %}
+                    </p>
+                    {% if person.place_of_birth %}
+                        <p class="person-meta">Место рождения: {{ person.place_of_birth }}</p>
+                    {% endif %}
+                    {% if person.biography %}
+                        <p class="person-notes">{{ person.biography[:200] }}{% if person.biography|length > 200 %}...{% endif %}</p>
+                    {% endif %}
+                    
+                    <div class="person-actions">
+                        <button class="btn btn-sm btn-primary" onclick="FamilyTree.editPerson({{ person.id }})">
+                            ✏️ Редактировать
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="FamilyTree.deletePerson({{ person.id }}, '{{ person.last_name }} {{ person.first_name }}')">
+                            🗑️ Удалить
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty-state">Нет персон в базе данных. Нажмите "Добавить персону" чтобы начать.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <hr class="dashed-line">
+
+    <section>
+        <p>
+            Наверное, на Мало-Кушумских просторах когда-то пасли свои стада печенеги, и когда-то на высоком берегу
+            Большого
+            Иргиза стояли юрты и мазанки разных кочевых народов
+            , а затем и народов древней Булгарии. Более менее точные данные о заселении здешних мест известно
+            с 17 века, когда царские (по сути государственные) земли щедро дарились для заселения. И сюда, кто по
+            доброй воле, а кто и насильно прибывали
+            новосёлы. По некоторым сохранившимся документам известно, что многие переселенцы были из Тамбовской,...
+            <br>
+            Рассуждения на эти темы также как и другое любопытство подтолкнули меня к исследованиям и
+            сделать доступный на сегодня генетический тест. Результаты теста покажут какие группы
+            оставили след в нашей наследственности и примерный
+            ареал их массового проживания. Кроме этого фирма Genotek, в которой идет расшифровка моего генома,
+            предоставляет возможность загрузки нашей родословной.
+        </p>
+    </section>
+</main>
+{% endblock %}

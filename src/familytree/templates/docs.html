@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Документы — Семейное древо{% endblock %}
+
+{% block content %}
+<h1>АРХИВ: ДОКУМЕНТЫ, ФОТОГРАФИИ, УКАЗАТЕЛИ</h1>
+
+<main>
+    <table class="list">
+        <caption>Таблица документов</caption>
+        <thead>
+            <tr>
+                <th>Фамилия</th>
+                <th>Имя</th>
+                <th>Отчество</th>
+                <th>Тип документа</th>
+                <th>Год</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for doc in documents %}
+            <tr>
+                <td>{{ doc.last_name }}</td>
+                <td>{{ doc.first_name }}</td>
+                <td>{{ doc.middle_name or '' }}</td>
+                <td>{{ doc.archive_records[:50] }}{% if doc.archive_records and doc.archive_records|length > 50 %}...{% endif %}</td>
+                <td>{{ doc.birth_year or '' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5">Документы пока не добавлены</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if documents %}
+    <h2>Список документов</h2>
+    <ul>
+        {% for doc in documents %}
+        <li>
+            <strong>{{ doc.last_name }} {{ doc.first_name }}</strong> — {{ doc.archive_records[:100] }}
+            {% if doc.birth_year %} ({{ doc.birth_year }} г.р.){% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,185 @@
+body {
+	font-size: 16px;
+	margin: 10px; 
+	padding: 10px;
+	font: 1em sans-serif;
+	background-color: rgba(194, 227, 224, 0.55);
+
+}
+
+.header {
+	height: 150px;
+	max-width: 100%;
+	display: flex;
+	flex-direction: row;
+	/* row элементы располагаются гориз вдоль оси */
+	flex-wrap: wrap;
+	/* будет контейнер однострочный или многстрочный. wrap -многостроч */
+	justify-content: space-between;
+	align-items: center;
+	width: 1366px;
+	background-color: rgb(23, 23, 230);
+}
+.main {
+	display: flex;
+	min-height: 100px;
+	margin: 5px;
+	padding: 10px;
+	max-width: 100%;
+	background-color: lightgray;
+}
+.container {
+display: flex;
+justify-content: flex-start;
+}
+.nav_left {
+	width: 20%;
+	background-color: burlywood;
+}
+
+.dashed-line {
+	/* Горизонт.Линия */
+	 border: none;  
+    border-top: 2px dashed #999;  
+    margin: 25px 0;
+}
+ p { text-indent: 25px;
+/* Красная строка */
+}
+.time {
+	width: 350px;
+	height: 120px;
+	float: left;
+	background-color: rgb(14, 190, 190);
+}
+h2{
+	width: 350px;
+	justify-self: center;
+	color: #dbb5a8;
+	background-color: #2a2003;
+	margin-right: 280px;
+
+}
+dt {
+	size: 18px;
+	color: orangered;
+}
+nav {
+	display: flex;
+	margin: 10px 0;
+	background-color: #e4c367;
+}
+
+
+
+nav ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	position: relative;
+	/* убираем отступы и поля, а также list-style для "ul", 
+			 * и добавляем "position:relative" */
+}
+
+nav ul li {
+	margin: 0px 9px 0 0;
+	display: inline-block;
+	/* применяем inline-block позиционирование к элементам навигации */
+	background-color: #ac3206;
+	border-radius: 12px;
+}
+
+nav a {
+	display: block;
+	padding: 0 10px;
+	color: #FFF;
+	font-size: 20px;
+	line-height: 60px;
+	text-decoration: none;
+}
+
+nav a:hover {
+	/* стилизуем ссылки */
+	background-color: #996c6c;
+	/* изменяем цвет фона при наведении курсора */
+}
+
+
+
+nav ul ul {
+/* скрываем выпадающие списки по умолчанию
+			 * и задаем абсолютное позиционирование */
+	display: none;
+	position: absolute;
+	top: 100%;
+	z-index: 10;
+}
+
+/* отображаем выпадающий список при наведении */
+nav ul li:hover>ul {
+	display: inherit;
+}
+
+nav ul ul li {
+	min-width: 70px;
+	float: none;
+	display: list-item;
+	position: relative;
+}
+
+/* измените ' +' на любой другой символ, если нужно
+	*/
+li>a:after {
+	content: ' +';
+}
+
+li>a:only-child:after {
+	content: '';
+}
+.table_of_contents {
+	width: 200px;
+	margin: 25px;
+	border: 2px solid red;
+}
+
+dd {
+	font-size: 18px;
+	font-style: italic;
+}
+
+dt {
+	margin-top: 1lem;
+	font-size: 24px;
+}
+
+table {
+	border: 1px solid #000;
+}
+
+/*Границы для ячеек таблицы*/
+td {
+	border: 1px solid #000;
+}
+
+table {
+	font-size: 18px;
+	width: 50%;
+	height: 200px;
+}
+
+.clr {
+	height: 50px;}
+
+
+.code-toolbar {
+	background: rgb(227, 235, 137);
+	font-size: 25px;
+	color: #d00bb6;
+}
+
+.footer {
+	height: 50px;
+	background-color: rgb(204, 80, 19);
+	padding: 12px;
+	margin: 12px;
+}

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Как мне нравится быть бабушкой</title>
+    <style>
+      :root {
+        --bg-color: #fdfbf7;
+        --accent: #d4a373;
+        --text-dark: #333;
+        --card-bg: #fff;
+      }
+      body {
+        font-family: Georgia, "Times New Roman", serif;
+        background-color: var(--bg-color);
+        color: var(--text-dark);
+        margin: 0;
+        padding: 0;
+        line-height: 1.6;
+      }
+      header {
+        text-align: center;
+        padding: 40px 20px;
+        background: #fff;
+        border-bottom: 3px solid var(--accent);
+      }
+      h1 { margin: 0 0 10px; color: var(--text-dark); }
+      p.subtitle { margin: 0; color: #666; }
+      .search-box {
+        max-width: 500px;
+        margin: 20px auto;
+        position: relative;
+      }
+      .search-box input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid #ccc;
+        border-radius: 24px;
+        box-sizing: border-box;
+        font-size: 16px;
+      }
+      main {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      section { margin-bottom: 40px; }
+      h2 {
+        border-left: 5px solid var(--accent);
+        padding-left: 15px;
+        margin-top: 0;
+      }
+      .photo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+      .photo-item img {
+        width: 100%;
+        height: 220px;
+        object-fit: cover;
+        border-radius: 8px;
+        display: block;
+      }
+      .photo-caption {
+        margin-top: 8px;
+        text-align: center;
+        font-style: italic;
+        color: #555;
+        font-size: 0.95rem;
+      }
+      .joy-list {
+        list-style: none;
+        padding: 0;
+      }
+      .joy-list li {
+        background: var(--card-bg);
+        border-left: 4px solid var(--accent);
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        border-radius: 0 8px 8px 0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      }
+      blockquote {
+        font-style: italic;
+        border-left: 4px solid var(--accent);
+        padding-left: 16px;
+        margin: 20px 0;
+        color: #444;
+      }
+      footer {
+        text-align: center;
+        padding: 30px 20px;
+        color: #777;
+        font-size: 0.9rem;
+      }
+      @media (max-width: 600px) {
+        header { padding: 25px 15px; }
+        h1 { font-size: 1.5rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Как мне нравится быть бабушкой</h1>
+      <p class="subtitle">Радости, моменты и маленькие традиции</p>
+      <div class="search-box">
+        <input type="text" id="page-search" placeholder="Поиск по странице (по словам: чай, сказки, прогулки…)" />
+      </div>
+    </header>
+
+    <main>
+      <section>
+        <h2>Главное — тепло и забота</h2>
+        <p>Быть бабушкой — это про особенные моменты: запах свежей выпечки, тёплые объятия, тихие вечера с рассказами. Здесь я делюсь тем, что особенно греет сердце.</p>
+        <blockquote>«Счастье — это когда внуки бегут навстречу и кричат: „Бабушка, ты пришла!“»</blockquote>
+      </section>
+
+      <section>
+        <h2>Радости бабушкиной жизни</h2>
+        <ul class="joy-list">
+          <li>Печь пироги и слышать: «Ещё кусочек!»</li>
+          <li>Читать вслух и видеть, как загораются глаза.</li>
+          <li>Гулять в парке и собирать самые красивые листья.</li>
+          <li>Учить вязать или лепить — и радоваться первым успехам.</li>
+          <li>Рассказывать семейные истории и видеть интерес в глазах.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Любимые моменты (фотогалерея)</h2>
+        <div class="photo-grid">
+          <!-- Замените src на реальные пути к фото -->
+          <div class="photo-item">
+            <img src="https://via.placeholder.com/400x300/d4a373/ffffff?text=Бабушка+и+внуки" alt="Бабушка с внуками" />
+            <div class="photo-caption">Тёплый вечер: читаем книжку вместе</div>
+          </div>
+          <div class="photo-item">
+            <img src="https://via.placeholder.com/400x300/d4a373/ffffff?text=Пироги" alt="Пироги из печи" />
+            <div class="photo-caption">Пироги — наш маленький семейный ритуал</div>
+          </div>
+          <div class="photo-item">
+            <img src="https://via.placeholder.com/400x300/d4a373/ffffff?text=Прогулка" alt="Прогулка в парке" />
+            <div class="photo-caption">Осенняя прогулка: собираем листья для гербария</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Семейные традиции</h2>
+        <p>Несколько простых традиций, которые делают будни особенными:</p>
+        <ul>
+          <li><strong>Воскресные пироги.</strong> Вместе замешиваем тесто, обсуждаем неделю, смеёмся над ошибками.</li>
+          <li><strong>Вечерние сказки.</strong> Даже если внук уже «большой», 10 минут чтения — и день становится добрее.</li>
+          <li><strong>Альбом воспоминаний.</strong> Раз в месяц добавляем фото, подписи, короткие истории.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      &copy; 2025 Семейная страница. Сделано с любовью.
+    </footer>
+
+    <script>
+      const searchInput = document.getElementById('page-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          const query = e.target.value.toLowerCase();
+          const allText = document.body.innerText;
+          // Простой способ подсветить совпадения сложно без замены DOM,
+          // поэтому здесь просто скролл к первому совпадению по заголовкам/секциям
+          if (!query) return;
+
+          const sections = document.querySelectorAll('section');
+          let found = false;
+          sections.forEach(sec => {
+            const text = sec.innerText.toLowerCase();
+            if (text.includes(query)) {
+              sec.scrollIntoView({ behavior: 'smooth' });
+              found = true;
+              // Можно добавить временную подсветку — по желанию
+              return;
+            }
+          });
+          if (!found) {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

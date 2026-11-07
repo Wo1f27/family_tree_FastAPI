@@ -1,0 +1,39 @@
+<div class="person-card">
+    <div class="main-photo-wrapper">
+        {% if person.photos %}
+            <img src="{{ person.photos[0] }}" alt="{{ person.first_name }}" class="main-photo">
+        {% else %}
+            <img src="/static/img/placeholder.png" alt="Фото" class="main-photo">
+        {% endif %}
+    </div>
+
+    <div class="mini-gallery">
+        {% for photo in person.photos[1:4] %}
+            <img src="{{ photo }}" alt="Фото" class="gallery-img">
+        {% endfor %}
+    </div>
+
+    <h3>{{ person.last_name }} {{ person.first_name }}{% if person.middle_name %} {{ person.middle_name }}{% endif %}{% if person.maiden_name %} (дев.{{ person.maiden_name }}){% endif %}</h3>
+    <p class="person-meta">
+        {% if person.birth_year %}
+            {% if person.birth_approx %}ок. {% endif %}{{ person.birth_year }} г.{% if person.birth_month %} — {% endif %}
+        {% endif %}
+        {% if person.death_year %}
+            {% if person.death_approx %}ок. {% endif %}{{ person.death_year }} г.
+        {% endif %}
+    </p>
+    {% if person.place_of_birth %}
+        <p class="person-meta">Место рождения: {{ person.place_of_birth }}</p>
+    {% endif %}
+    {% if person.biography %}
+        <p class="person-notes">{{ person.biography[:200] }}{% if person.biography|length > 200 %}...{% endif %}</p>
+    {% endif %}
+    {% if person.relationships %}
+        <p class="person-meta">
+            <strong>Связи:</strong>
+            {% for rel in person.relationships %}
+                {{ rel.type }}: <a href="/family/{{ rel.surname }}">{{ rel.name }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+    {% endif %}
+</div>

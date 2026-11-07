@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гончаровы Артём и Анна</title>
+     <script src="js/cloc_obrazec.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="header">
+        <div class="logo">
+            <!-- Логотип сайта -->
+            <a href="../../website_HyperText/HTML.html" target="_blank">ИзучениеHTML</a>
+        </div>
+
+        <ul class="nav">
+
+      <li><a href="index.html">Главная</a></li>
+      <li><a href="Фамилии.html">Фамилии</a></li>
+      <li><a href="doc.html">Документы</a></li>
+      <li><a href="gallery.html">Галереи</a></li>
+      <li><a href="guest.html">Гостевая</a></li>
+      <li><a href="Новая.html">Новая</a></li>
+      <li><a href="Владимир.html">О сайте</a></li>
+        </ul>
+        </nav>
+
+        <form class="search" action="index.html" method="get">
+            <!-- Поле поиска по сайту -->
+            <input type="search" name="q" placeholder="Поиск по сайту">
+            <button type="submit">Искать</button>
+        </form>
+        
+          <div class="time">
+            <h5>Электронные часы</h5>
+            <div style="color: rgb(6, 1, 32); font: 2em sans-serif;" id="clock"></div>
+          </div>
+    </header>
+
+  <h1>Семья ГОНЧАРОВЫХ Артёма Захаровича и Анны Николаевны</h1>
+  <a href="Фамилии.html">← Назад к списку фамилий</a>
+
+  <div class="person-list">
+    <div class="person-card">
+      <div class="main-photo-wrapper">
+        <img src="img/Бабушка Нюся_Анна Николаевна Гончарова.png" alt="Гончарова Анна Николаевна" class="main-photo">
+      </div>
+
+      <div class="mini-gallery">
+        <!-- Доп. фото: скан дела -->
+        <img src="img/Справка Гончаровы о регистрации 1925г.jpg" alt="Справка о регистрации Гончаровы" class="gallery-img">
+        <!-- Доп. фото: дом в Малом Кушуме -->
+        <img src="img/Гончаров Артем Зах и Анна Н  наверное Слава Саратов.jpg" alt="Дом в Балаково" class="gallery-img">
+      </div>
+
+      <h3>Анна Николаевна Гончарова (дев.Ивакина, по первому мужу Чуркина)</h3>
+      <p class="person-meta">Анна родилась 1893 году вероятно в г. Балаково. Артём (Артемий) Захарович 1894</p>
+      <p class="person-notes">фото перефотографировал которое висело на стене</p>
+      <p class="person-meta">найти </p>
+       <a href="Фамилии.html">← Назад к списку фамилий</a>
+    </div>
+
+    <!-- Карточка 2 -->
+    <div class="person-card">
+      <div class="main-photo-wrapper">
+        <img src="img/Гончаров Артем Захар_ у радио 680х.png" alt="Гончаров Артем Захар и Анна Николаевна за сталом_ у радиоприемника" class="main-photo">
+      </div>
+
+      <div class="mini-gallery">
+        <img src="img/Гончаров Артем Захарович_20230228_161834.jpg" alt="Гончаров Артем" class="gallery-img">
+        <img src="img/1968г_Гончаров Артём_20240213_095138.jpg" alt="1968 год Гончаров Артём" class="gallery-img">
+      </div>
+
+      <h3>Артём (Артемий) Захарович Гончаров</h3>
+      <p class="person-meta">Муж Анны Николаевны Гончаровой (дев.Ивакина)</p>
+      <p class="person-notes">Документы</p>
+      <a href="doc.html">← Doc</a>
+    </div>
+<!-- Карточка 3 -->
+    <div class="person-card">
+      <div class="main-photo-wrapper">
+        <img src="img/Вязанкина Клавдия Гавриловна.jpg" alt="Клавдея Вязанкина (Чуркина)" class="main-photo">
+      </div>
+
+      <div class="mini-gallery">
+        <img src="https://via.placeholder.com/150x200?text=Трудодни" alt="Трудодни, колхоз" class="gallery-img">
+        <img src="https://via.placeholder.com/150x200?text=Удостоверение" alt="Удостоверение члена КПСС" class="gallery-img">
+      </div>
+
+      <h3>Клавдия Гавриловна (Чуркина) Вязанкина</h3>
+      <p class="person-meta">Дочь Анны Николаевны Гончаровой</p>
+      <p class="person-notes">Дата рождения 21 марта 1914.....умерла 30 ноября 2006г</p>
+      <a href="Вязанкина_К_Г.html"target="_blank" >←  к странице Вязанкины А.Д и К.Г.</a>
+    </div>
+  </div>
+
+  <!-- Модальное окно -->
+  <div class="modal" id="photoModal">
+    <img id="modalImg" class="modal-img" src="" alt="">
+  </div>
+
+  <script>
+    const modal = document.getElementById('photoModal');
+    const modalImg = document.getElementById('modalImg');
+    const galleryImgs = document.querySelectorAll('.gallery-img');
+
+    galleryImgs.forEach(img => {
+      img.addEventListener('click', () => {
+        modalImg.src = img.src;
+        modal.classList.add('active');
+      });
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('active');
+    });
+  </script>
+        
+  </div>
+  
+</body>
+</html>

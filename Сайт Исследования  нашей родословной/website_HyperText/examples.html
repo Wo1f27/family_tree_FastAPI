@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<!--(доктайп)(Document Type Declaration —тип документа) Структура HTML кода.  -->
+<html lang="ru">
+<!-- псевдокласс с его помощью определяется язык кода-->
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Примеры</title>
+	<script src="js/cloc_obrazec.js"></script>
+	<link rel="stylesheet" href="styles/menu_obrazec.css">
+</head>
+
+<body>
+	<header class="header">
+		<div class="time">
+			<h1>Электронные часы</h1>
+			<div style="color: rgb(6, 1, 32); font: 2em sans-serif;" id="clock"></div>
+		</div>
+
+		<h2>Примеры кода</h2>
+
+	</header>
+
+	<nav>
+		<ul>
+			<li><a href="Index.html">Глав_snip</a></li>
+			<li><a href="HTML.html">HTML</a>
+			<ul>
+					<li><a href="#">Основные теги</a></li>
+					<li><a href="text_formatting.html">Теги форматирования</a></li>
+					<li><a href="Теги СЕМАНТИЧЕСКИЕ.html">Семантические теги</a></li>
+					<li><a href="img_doc.html">img_doc</a>img</li>
+					<li><a href="#">Теги формы</a>Формы</li>
+				</ul>
+			</li>
+			<li><a href="VS Code.html">VS Code</a></li>
+			<li><a href="PoCSS.html">PoCSS</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства CSS</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="Flex.html">Flex</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства Flex</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="img_doc.html">img_doc</a></li>
+			<li><a href="CEO.html">CEO</a></li>
+			
+			<li><a href="examples.html">Примеры</a>
+				<ul>
+					<li><a href="Flex свойства.html">Разделение div на две колонки</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="words_and_translation.html">Словарь</a></li>
+		</ul>
+	</nav>
+	<body>
+		<h3>Это — Flex-Grow</h3>
+		<h5>
+			A,B,C и F имеют коэффициент увеличения flex-grow:1, а D и E — flex-grow:2 .
+		</h5>
+		<div id="content">
+			<div class="box" style="background-color:red;">A</div>
+			<p>параграф</p>
+			<div class="box" style="background-color:lightblue;">B</div>
+			<div class="box" style="background-color:yellow;">C</div>
+			<div class="box1" style="background-color:brown;">D</div>
+			<div class="box1" style="background-color:lightgreen;">E</div>
+			<div class="box" style="background-color:brown;">F</div>
+		</div>
+		<hr style="border: 0; height: 3px; background-color: #df1f1f;">
+
+
+
+		<p>
+		<h2>Пример адаптивной верстки c bootstrap из ж-ла КОД</h2>
+		Смотри в <a href="https://thecode.media/bootstrap/"> журнал КОД</a>
+
+		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+			integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+		<!-- задаём CSS-стили прямо здесь же, чтобы всё было в одном файле -->
+		<style type="text/css">
+			img {
+				max-width: 100%;
+			}
+		</style>
+		<!-- закрываем служебную часть страницы -->
+		</head>
+
+		<body>
+			<div class="container">
+				<div class="row">
+					<div class="col-12">
+						<h1>Адаптивная вёрстка</h1>
+					</div>
+				</div>
+			</div>
+			<div class="container">
+				<div class="row">
+					<div class="col-12 col-sm-12 col-md-4 col-lg-2 col-xl-2">
+						<!-- <img src="http://thecode.local/wp-content/uploads/2019/06/cat1.jpg"> -->
+						<img src="images/Доп образ в РЭУ Г.А.Плеханова.jpg">
+					</div>
+					<div class="col-12 col-sm-12 col-md-4 col-lg-8 col-xl-8">
+						<!-- <img src="http://thecode.local/wp-content/uploads/2019/06/cat2.jpg"> -->
+						<img src="images/Доп образ в РЭУ Г.А.Плеханова.jpg">
+					</div>
+					<div class="col-12 col-sm-12 col-md-4 col-lg-2 col-xl-2">
+						<!-- <img src="http://thecode.local/wp-content/uploads/2019/06/anton-kraev-1166716-unsplash.jpg"> -->
+						<img src="images/Доп образ в РЭУ Г.А.Плеханова.jpg">
+					</div>
+				</div>
+			</div>
+			</p>
+			<p>
+				<hr class="dashed-line">
+			<h3>Как снять специфичность с &lt;body&gt; в гиперпроекте</h3>
+			Чтобы убрать отступы в элементе &lt;body&gt;, нужно установить значение margin для селектора body> равное
+			нулю.
+			Свойство margin позволяет задать величину отступа сразу для всех сторон элемента или определить её только
+			для указанных сторон.
+			</p>
+			<section class="R">
+				<!--      создаем раздел, он не видимый, но семантика для СЕО более приятна-->
+				<div class="container">
+					<!--      создаем контейнер для центрирования, например, ограничитель по ширене-->
+					<h2>В этом </h2>
+
+					<h3>Проверка работы bootstrap</h3>
+					<button type="button" class="btn btn-primary"><a href="CEO.html">переход на ceo</a>сущ</button>
+					<button type="button" class="btn btn-secondary">Secondary</button>
+					<button type="button" class="btn btn-success">Success</button>
+					<button type="button" class="btn btn-danger">Danger</button>
+					<button type="button" class="btn btn-warning">Warning</button>
+					<button type="button" class="btn btn-info">Info</button>
+					<button type="button" class="btn btn-light">Light</button>
+					<button type="button" class="btn btn-dark">Dark</button>
+
+					<button type="button" class="btn btn-link">Link</button>
+					</p>
+				</div>
+			</section>
+			<!-- <div class="row">    создали контейнер для вычислений делит на 12 частей и далее <div class="one about  col-sm-3" >  под размер мониторов, в данном случае 3, то есть столбцы --они обязательно должны находиться в строке, а строка в контейнере-->
+			<section class="main-steps">
+
+				<!-- <hr style="border-style: ; height: 3px; background-color: #df1f1f;"> -->
+				<hr class="dashed-line">
+				<p>Все веб-сервера, по умолчанию, выдают браузеру стартовую страницу index.html. </p>
+			</section>
+			<p>
+			<h2>единицы измерения</h2>
+			1.0em=10px; 1.1em=11px; 2em=20px; 5em=50px;<br>
+			В CSS3 были добавлены новые относительные единицы измерения, такие как vh, vw, vmin, vmax. Эти единицы
+			вычисляются
+			относительно размеров окна браузера. Для настольных компьютеров ширина окна браузера больше ширины области
+			просмотра
+			(добавляется ширина скроллбара), поэтому если для элемента установить ширину 100vw, то он выйдет за пределы
+			html.
+			<br>
+
+			</p>
+			
+			<div class="footer">
+				<p>&copy Владимир Стрелков, 2023</p>
+			</div>
+			
+			<!-- <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+			<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script> -->
+			<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+		integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+		crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"
+		integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+"
+		crossorigin="anonymous"></script>
+	</main>
+</body>
+
+</html>

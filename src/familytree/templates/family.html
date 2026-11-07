@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Семья {{ surname }} — Семейное древо{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Семья {{ surname }}</h1>
+    <div class="header-actions">
+        <a href="/surnames" class="btn btn-secondary">← Назад к списку фамилий</a>
+        <button class="btn btn-primary" data-open-modal="modal-person">
+            <span class="btn-icon">➕</span> Добавить персону
+        </button>
+    </div>
+</div>
+
+<div class="person-list">
+    {% for person in persons %}
+    <div class="person-card" data-person-id="{{ person.id }}">
+        <div class="main-photo-wrapper">
+            <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+        </div>
+
+        <h3>{{ person.last_name }} {{ person.first_name }}{% if person.middle_name %} {{ person.middle_name }}{% endif %}{% if person.maiden_name %} (дев.{{ person.maiden_name }}){% endif %}</h3>
+        <p class="person-meta">
+            {% if person.birth_year %}
+                {% if person.birth_approx %}ок. {% endif %}{{ person.birth_year }} г.{% if person.birth_month %} — {% endif %}
+            {% endif %}
+            {% if person.death_year %}
+                {% if person.death_approx %}ок. {% endif %}{{ person.death_year }} г.
+            {% endif %}
+        </p>
+        {% if person.place_of_birth %}
+            <p class="person-meta">Место рождения: {{ person.place_of_birth }}</p>
+        {% endif %}
+        {% if person.biography %}
+            <p class="person-notes">{{ person.biography[:200] }}{% if person.biography|length > 200 %}...{% endif %}</p>
+        {% endif %}
+        
+        <div class="person-actions">
+            <button class="btn btn-sm btn-primary" onclick="FamilyTree.editPerson({{ person.id }})">
+                ✏️ Редактировать
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="FamilyTree.deletePerson({{ person.id }}, '{{ person.last_name }} {{ person.first_name }}')">
+                🗑️ Удалить
+            </button>
+        </div>
+    </div>
+    {% else %}
+        <p class="empty-state">Пока нет персон с фамилией {{ surname }}. Нажмите "Добавить персону" чтобы начать.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

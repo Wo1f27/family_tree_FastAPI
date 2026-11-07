@@ -1,0 +1,84 @@
+body {
+	padding: 10px;
+	font-size: medium;
+	font: 1em sans-serif;
+	background-color: rgb(211, 204, 204);
+
+}
+
+.time {
+	width: 350px;
+	height: 100px;
+	background-color: rgb(14, 190, 190);
+}
+
+nav {
+	margin: 10px 0;
+	background-color: #E64A19;
+
+}
+
+/* убираем отступы и поля, а также list-style для "ul", 
+			 * и добавляем "position:relative" */
+
+nav ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	position: relative;
+}
+
+/* применяем inline-block позиционирование к элементам навигации */
+nav ul li {
+	margin: 0px 9px 0 0;
+	display: inline-block;
+	background-color: #E64A19;
+}
+
+nav a {
+	display: block;
+	padding: 0 10px;
+	color: #FFF;
+	font-size: 20px;
+	line-height: 60px;
+	text-decoration: none;
+}
+
+/* стилизуем ссылки */
+
+/* изменяем цвет фона при наведении курсора */
+nav a:hover {
+	background-color: #836666;
+}
+
+/* скрываем выпадающие списки по умолчанию
+			 * и задаем абсолютное позиционирование */
+
+nav ul ul {
+	display: none;
+	position: absolute;
+	top: 100%;
+	z-index: 10;
+}
+
+/* отображаем выпадающий список при наведении */
+nav ul li:hover>ul {
+	display: inherit;
+}
+
+nav ul ul li {
+	min-width: 70px;
+	float: none;
+	display: list-item;
+	position: relative;
+}
+
+/* измените ' +' на любой другой символ, если нужно
+	*/
+li>a:after {
+	content: ' +';
+}
+
+li>a:only-child:after {
+	content: '';
+}

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Flex_свойства</title>
+	<script src="js/cloc_obrazec.js"></script>
+	<link rel="stylesheet" href="styles/menu_obrazec.css">
+</head>
+
+<body>
+	<header class="header">
+		<div class="time">
+			<h1>Электронные часы</h1>
+			<div style="color: rgb(6, 1, 32); font: 2em sans-serif;" id="clock"></div>
+		</div>
+
+		<h2>Свойства Flex</h2>
+
+	</header>
+	<nav>
+		<ul>
+			<li><a href="Index.html">Глав_snip</a></li>
+			<li><a href="HTML.html">HTML</a>
+				<ul>
+					<li><a href="text_formatting.html">Теги форматирования</a></li>
+					<li><a href="#">Семантические теги</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="VS Code.html">VS Code</a></li>
+			<li><a href="PoCSS.html">PoCSS</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства CSS</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="Flex свойства.html">Flex</a>
+				<ul>
+					<li><a href="Flex свойства.html">Свойства Flex</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="img_doc.html">img_doc</a></li>
+			<li><a href="CEO.html">CEO</a></li>
+			<li><a href="examples.html">Примеры</a>
+				<ul>
+					<li><a href="Flex свойства.html">Разделение div на две колонки</a></li>
+					<li><a href="#">Пункт_2</a></li>
+					<li><a href="#">Пункт_3</a></li>
+				</ul>
+			</li>
+			<li><a href="words_and_translation.html">Словарь</a></li>
+		</ul>
+	</nav>
+	<main>
+
+		<div class="container">
+			<p>padding - [паэдинг - как сущ. набивка, как прилаг -дополнительный ]со всех сторон. В CSS — это внутренний
+				отступ, который создаёт пространство между содержимым элемента и его границей (border).</p>
+			<img src="images/Блочный элемент ОТСТУПЫ.jpg" alt="Блочные элементы ОТСТУПЫ">
+			<ul>
+				<h3>Разберём три ключевые группы свойств:</h3>
+				<li>Направление оси (flex-direction) — по горизонтали, по вертикали, в обратную сторону.</li>
+				<li>Выравнивание по главной оси (justify-content).</li>
+				<li>Выравнивание по поперечной оси (align-items и align-content) — по вертикали или в пределах
+					нескольких строк.</li>
+			</ul>
+			<dl>
+				<dt>flex-direcction</dt>👉 Главное, что нужно запомнить: flex-direction меняет основную ось (main axis),
+				и все остальные свойства (justify-content, align-items) начинают работать относительно этой
+				оси.СМ.Инструмент разработчика...какая ось...
+				<dd>
+					<ol>
+						<li>flex-direction: row; - по умолчанию — в строку слева направо </li>
+						<li>flex-direction: row-reverse; в строку справа налево</li>
+						<li>а если flex-direction: column - то выравниваются по вертикали сверху вниз:</li>
+						<li>flex-direction: column-reverse; в колонку снизу вверх </li>
+					</ol>
+				</dd>
+				<dt>justify-content</dt>
+				<dd>[ждустив контент] перевод = растянуть контент по основной оси, т.е если
+
+					У этого свойства есть 6 режимов
+					<ul>
+						<li><b>justify-content: space-aurond</b> [спейс эйараунд] = растянуть
+							равномерно; Абсолютно равные отступы между всеми элементами</li>
+						<li><b>juatify-cjntent: flex-start</b> (в начало);Элементы прижаты к началу оси (слева или
+							сверху)</li>
+						<li><b>center</b> (по центру);Все элементы выравниваются по центру оси</li>
+						<li> <b>flex-end</b> (в конец);Элементы прижаты к концу оси (справа или снизу)</li>
+						<li><b>space-between</b>
+							[спейс бетвин] = (обычно в хедерах, футерах, навигации- когда надо два блока по бокам и
+							сто-то посередине) растянуть с равными расстояниями;Первый элемент у начала, последний — у
+							конца, между остальными равные отступы</li>
+						<li><b>justify-content:</b> space-evenly;Абсолютно равные отступы между всеми элементами,
+							включая края
+
+						</li>
+					</ul>
+				</dd>
+			</dl>
+
+			<p>
+			<h3>Теперь рассмотрим выравнивание перпендикулярно основной оси.</h3>
+			<b>align-items</b>([эйлайн айтемс] перевод= центрирование по вертикали):управляет выравниванием
+			флекс-элементов в пределах одной строки/колонки;<br>
+			<b>align-content</b> - работает, когда у вас несколько строк (например, при flex-wrap: wrap) и управляет
+			выравниванием всей группы строк. <br>
+			<b>align-items</b>[эйлайн айтемс]-это выравнивание флекс-элементов вдоль поперечной оси (обычно по
+			вертикали), внутри одной линии раскладки. То есть работает в пределах одной «флекс-строки».
+			<div class="code-toolbar">
+				<ol>
+					<li>align-items: stretch; ([стреч]растянуть на всю высоту, с тектом обычно не работаем);/* по
+						умолчанию — элементы растягиваются по высоте */</li>
+					<li>align-items: flex-start; /* прижаты к началу поперечной оси */(в верхнюю часть);</li>
+					<li>align-items: flex-end; /* прижаты к концу */(в нижнюю часть);</li>
+					<li>align-items: center; /* по центру */работает, когда у вас несколько строк (например, при
+						flex-wrap: wrap) и управляет выравниванием всей группы
+						строк.</li>
+					<li>align-items: baseline; [безлайн](базовая линия);/* по базовой линии текста */</li>
+				</ol>
+				Смотри<a href="https://thecode.media/flexbox-css/"> показано на картинке</a>
+			</div>
+			<p>Здесь важно уточнить два нюанса:
+			<ol>
+				<li><strong style="color: #d00bb6;">stretch</strong> не сработает, если у флекс-элемента явно задана
+					высота height (или width при flex-direction: column). Растягиваться просто некуда — браузер следует
+					заданному размеру</li>
+				<li><strong style="color: #d00bb6;">baseline</strong> имеет смысл только при наличии текста и особенно
+					заметен, когда шрифты в элементах различаются по размеру. Если контент одинаковый, визуальной
+					разницы с flex-start почти не будет.</li>
+			</ol>
+
+
+			Дальше рассмотрим <strong style="color: #d00bb6;">align-content </strong>— это свойство управляет выравниванием групп флекс-элементов внутри
+			контейнера по поперечной оси. </p>
+			</p>
+		</div>
+	</main>
+	<div class="clr"></div>
+	<div class="footer">
+		<p>Подвал &copy 2023</p>
+	</div>
+</body>
+
+</html>

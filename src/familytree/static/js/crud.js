@@ -265,41 +265,89 @@
         try {
             const persons = await apiRequest('/api/v1/persons/');
             
+            // Create a map of new persons for quick lookup
+            const newPersonsMap = new Map();
+            persons.forEach(p => newPersonsMap.set(p.id, p));
+            
+            // Get existing person cards
+            const existingCards = container.querySelectorAll('.person-card');
+            const existingIds = new Set();
+            existingCards.forEach(card => existingIds.add(parseInt(card.dataset.personId)));
+            
+            // Find persons to remove (exist but not in new list)
+            existingIds.forEach(id => {
+                if (!newPersonsMap.has(id)) {
+                    const card = container.querySelector(`[data-person-id="${id}"]`);
+                    if (card) card.remove();
+                }
+            });
+            
+            // Update or add persons
+            persons.forEach(person => {
+                const existingCard = container.querySelector(`[data-person-id="${person.id}"]`);
+                const personHtml = createPersonCard(person);
+                
+                if (existingCard) {
+                    // Update existing card
+                    const newTemp = document.createElement('div');
+                    newTemp.innerHTML = personHtml;
+                    const newCard = newTemp.firstElementChild;
+                    
+                    // Preserve position-based animations
+                    if (existingCard.outerHTML !== personHtml) {
+                        existingCard.replaceWith(newCard);
+                    }
+                } else {
+                    // Add new card at the beginning
+                    const temp = document.createElement('div');
+                    temp.innerHTML = personHtml;
+                    const newCard = temp.firstElementChild;
+                    
+                    // Remove empty state if exists
+                    const emptyState = container.querySelector('.empty-state');
+                    if (emptyState) emptyState.remove();
+                    
+                    container.insertBefore(newCard, container.firstChild);
+                }
+            });
+            
+            // Show empty state if no persons
             if (persons.length === 0) {
                 container.innerHTML = '<p class="empty-state">Нет персон в базе данных. Нажмите "Добавить персону" чтобы начать.</p>';
-                return;
             }
-            
-            container.innerHTML = persons.map(person => `
-                <div class="person-card" data-person-id="${person.id}">
-                    <div class="main-photo-wrapper">
-                        <img src="/static/img/placeholder.png" alt="${person.first_name}" class="main-photo">
-                    </div>
-                    
-                    <h3>${person.last_name} ${person.first_name}${person.middle_name ? ' ' + person.middle_name : ''}${person.maiden_name ? ' (дев. ' + person.maiden_name + ')' : ''}</h3>
-                    <p class="person-meta">
-                        ${person.birth_year 
-                            ? (person.birth_approx ? 'ок. ' : '') + person.birth_year + ' г.' 
-                            : 'Год рождения: неизвестен'}
-                        ${person.death_year ? ' — ' + (person.death_approx ? 'ок. ' : '') + person.death_year + ' г.' : ''}
-                    </p>
-                    ${person.place_of_birth ? '<p class="person-meta">Место рождения: ' + person.place_of_birth + '</p>' : ''}
-                    ${person.biography ? '<p class="person-notes">' + person.biography.substring(0, 200) + (person.biography.length > 200 ? '...' : '') + '</p>' : ''}
-                    
-                    <div class="person-actions">
-                        <button class="btn btn-sm btn-primary" onclick="FamilyTree.editPerson(${person.id})">
-                            ✏️ Редактировать
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="FamilyTree.deletePerson(${person.id}, '${person.last_name} ${person.first_name}')">
-                            🗑️ Удалить
-                        </button>
-                    </div>
-                </div>
-            `).join('');
             
         } catch (error) {
             console.error('Error reloading persons:', error);
         }
+    }
+    
+    function createPersonCard(person) {
+        return `
+            <div class="person-card" data-person-id="${person.id}">
+                <div class="main-photo-wrapper">
+                    <img src="/static/img/placeholder.png" alt="${person.first_name}" class="main-photo">
+                </div>
+                
+                <h3>${person.last_name} ${person.first_name}${person.middle_name ? ' ' + person.middle_name : ''}${person.maiden_name ? ' (дев. ' + person.maiden_name + ')' : ''}</h3>
+                <p class="person-meta">
+                    ${person.birth_year 
+                        ? (person.birth_approx ? 'ок. ' : '') + person.birth_year + ' г.' 
+                        : 'Год рождения: неизвестен'}
+                    ${person.death_year ? ' — ' + (person.death_approx ? 'ок. ' : '') + person.death_year + ' г.' : ''}
+                </p>
+                ${person.place_of_birth ? '<p class="person-meta">Место рождения: ' + person.place_of_birth + '</p>' : ''}
+                ${person.biography ? '<p class="person-notes">' + person.biography.substring(0, 200) + (person.biography.length > 200 ? '...' : '') + '</p>' : ''}
+                
+                <div class="person-actions">
+                    <button class="btn btn-sm btn-primary" onclick="FamilyTree.editPerson(${person.id})">
+                        ✏️ Редактировать
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="FamilyTree.deletePerson(${person.id}, '${person.last_name} ${person.first_name}')">
+                        🗑️ Удалить
+                    </button>
+                </div>
+            </div>
+        `;
     }
 
     // ==================== EVENT LISTENERS ====================
@@ -319,12 +367,63 @@
             personForm.addEventListener('submit', submitPersonForm);
         }
         
+        // Surname form submit
+        const surnameForm = document.getElementById('surname-form');
+        if (surnameForm) {
+            surnameForm.addEventListener('submit', submitSurnameForm);
+        }
+        
         // If on a page with person list, ensure it's loaded
         const personList = document.querySelector('.person-list');
         if (personList && personList.children.length === 0) {
             reloadPersonsList();
         }
     });
+    
+    async function submitSurnameForm(e) {
+        e.preventDefault();
+        
+        const form = document.getElementById('surname-form');
+        const surname = document.getElementById('surname_name').value.trim();
+        const note = document.getElementById('surname_note').value.trim() || null;
+        
+        if (!surname) {
+            showNotification('Введите фамилию', 'error');
+            return;
+        }
+        
+        try {
+            showLoading(true);
+            
+            // Check if surname already exists
+            const existingPersons = await apiRequest('/api/v1/persons/');
+            const surnameExists = existingPersons.some(p => 
+                p.last_name.toLowerCase() === surname.toLowerCase()
+            );
+            
+            if (surnameExists) {
+                showNotification(
+                    `Фамилия "${surname}" уже существует в базе. Персоны с этой фамилией появятся автоматически при добавлении.`, 
+                    'info'
+                );
+            } else {
+                // Create a placeholder person to establish the surname category
+                // We'll create a minimal person and then let user edit it
+                showNotification(
+                    `Категория "${surname}" будет создана при добавлении первой персоны с этой фамилией.`, 
+                    'success'
+                );
+            }
+            
+            closeAllModals();
+            form.reset();
+            
+        } catch (error) {
+            showNotification('Ошибка: ' + error.message, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
 
     // ==================== GLOBAL API ====================
     
@@ -347,5 +446,8 @@
         showNotification,
         showLoading
     };
+
+    // Expose submitSurnameForm globally
+    window.submitSurnameForm = submitSurnameForm;
 
 })();

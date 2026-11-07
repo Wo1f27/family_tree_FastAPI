@@ -17,6 +17,18 @@
     </div>
     
     <main>
+        <!-- Sticky Action Bar -->
+        <div class="sticky-action-bar">
+            <div class="action-bar-content">
+                <button class="btn btn-primary" data-open-modal="modal-person">
+                    <span class="btn-icon">➕</span> Добавить персону
+                </button>
+                <button class="btn btn-secondary" data-open-modal="modal-surname">
+                    <span class="btn-icon">📝</span> Добавить фамилию
+                </button>
+            </div>
+        </div>
+        
         {% block content %}{% endblock %}
     </main>
     
@@ -202,6 +214,40 @@
                 <button class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
                 <button class="btn btn-secondary" onclick="FamilyTree.closeAllModals()">Отмена</button>
             </div>
+        </div>
+    </div>
+    
+    <!-- Modal: Add Surname -->
+    <div id="modal-surname" class="modal-backdrop" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Добавить фамилию</h2>
+                <button class="modal-close" onclick="FamilyTree.closeAllModals()">&times;</button>
+            </div>
+            
+            <form id="surname-form" class="surname-form" onsubmit="submitSurnameForm(event)">
+                <div class="form-section">
+                    <div class="form-group">
+                        <label for="surname_name">Фамилия *</label>
+                        <input type="text" id="surname_name" name="surname_name" placeholder="Например: Иванов" required>
+                        <small class="form-hint">При добавлении первой персоны с этой фамилией категория будет создана автоматически</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="surname_note">Примечание (необязательно)</label>
+                        <input type="text" id="surname_note" name="surname_note" placeholder="Например: ветвь от дедушки по материнской линии">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <span class="btn-icon">💾</span> Создать категорию
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-lg" onclick="FamilyTree.closeAllModals()">
+                        Отмена
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
     

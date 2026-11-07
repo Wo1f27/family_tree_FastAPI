@@ -3,6 +3,31 @@
  * Modal dialogs, forms, and interactive elements
  */
 
+/* ==================== STICKY ACTION BAR ==================== */
+
+.sticky-action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-bar-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.action-bar-content .btn {
+    flex: 0 0 auto;
+}
+
 /* ==================== NOTIFICATIONS ==================== */
 
 @keyframes slideIn {
@@ -216,6 +241,18 @@
 .form-group input[type="radio"] {
     width: auto;
     margin-right: 8px;
+}
+
+.form-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.surname-form {
+    padding: 30px;
 }
 
 .radio-group {

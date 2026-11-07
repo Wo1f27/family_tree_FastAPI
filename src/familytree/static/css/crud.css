@@ -333,13 +333,15 @@
 
 .action-buttons {
     display: flex;
-    gap: 12px;
-    margin-bottom: 20px;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 30px;
     flex-wrap: wrap;
 }
 
 .action-buttons .btn {
     flex: 0 0 auto;
+    min-width: 180px;
 }
 
 .person-list {

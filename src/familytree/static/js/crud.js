@@ -80,6 +80,86 @@
             // Reset date fields to empty
             document.getElementById('birth_approx').checked = false;
             document.getElementById('death_approx').checked = false;
+            
+            // Reset photo preview
+            const preview = document.getElementById('photo-preview');
+            if (preview) preview.style.display = 'none';
+            const previewImg = document.getElementById('photo-preview-img');
+            if (previewImg) previewImg.src = '';
+        }
+    }
+
+    function setupPhotoPreview() {
+        const fileInput = document.getElementById('photo_file');
+        if (!fileInput) return;
+        
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Validate file size (10 MB max)
+            if (file.size > 10 * 1024 * 1024) {
+                showNotification('Файл слишком большой. Максимум 10 МБ', 'error');
+                fileInput.value = '';
+                return;
+            }
+            
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                showNotification('Можно загружать только изображения', 'error');
+                fileInput.value = '';
+                return;
+            }
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('photo-preview');
+                const previewImg = document.getElementById('photo-preview-img');
+                if (preview && previewImg) {
+                    previewImg.src = e.target.result;
+                    preview.style.display = 'flex';
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function removePhotoPreview() {
+        const fileInput = document.getElementById('photo_file');
+        const preview = document.getElementById('photo-preview');
+        const previewImg = document.getElementById('photo-preview-img');
+        
+        if (fileInput) fileInput.value = '';
+        if (preview) preview.style.display = 'none';
+        if (previewImg) previewImg.src = '';
+    }
+
+    async function uploadPhoto(personId) {
+        const fileInput = document.getElementById('photo_file');
+        const file = fileInput?.files[0];
+        
+        if (!file) return;
+        
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('person_id', personId);
+            
+            const response = await fetch(`/api/v1/photos/upload?person_id=${personId}`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+                throw new Error(error.detail || 'Upload failed');
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Photo upload error:', error);
+            throw error;
         }
     }
 
@@ -173,6 +253,18 @@
                 method: method,
                 body: JSON.stringify(data)
             });
+            
+            const personId = result.id || editId;
+            
+            // Upload photo if selected
+            if (personId) {
+                try {
+                    await uploadPhoto(personId);
+                } catch (photoError) {
+                    console.warn('Photo upload failed:', photoError);
+                    // Don't fail the whole operation if photo upload fails
+                }
+            }
             
             showNotification(editId ? 'Персона обновлена' : 'Персона добавлена', 'success');
             closeAllModals();
@@ -322,10 +414,14 @@
     }
     
     function createPersonCard(person) {
+        const photoUrl = person.photos && person.photos.length > 0 
+            ? `/uploads/photos/persons/${person.id}/${person.photos[0].filename}`
+            : '/static/img/placeholder.png';
+        
         return `
             <div class="person-card" data-person-id="${person.id}">
                 <div class="main-photo-wrapper">
-                    <img src="/static/img/placeholder.png" alt="${person.first_name}" class="main-photo">
+                    <img src="${photoUrl}" alt="${person.first_name}" class="main-photo">
                 </div>
                 
                 <h3>${person.last_name} ${person.first_name}${person.middle_name ? ' ' + person.middle_name : ''}${person.maiden_name ? ' (дев. ' + person.maiden_name + ')' : ''}</h3>
@@ -366,6 +462,9 @@
         if (personForm) {
             personForm.addEventListener('submit', submitPersonForm);
         }
+        
+        // Setup photo preview
+        setupPhotoPreview();
         
         // Surname form submit
         const surnameForm = document.getElementById('surname-form');
@@ -444,7 +543,8 @@
         deletePerson,
         reloadPersonsList,
         showNotification,
-        showLoading
+        showLoading,
+        removePhotoPreview
     };
 
     // Expose submitSurnameForm globally

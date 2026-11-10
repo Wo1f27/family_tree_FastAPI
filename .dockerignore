@@ -1,0 +1,99 @@
+# ===========================================
+# Family Tree - .dockerignore
+# ===========================================
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+.docker/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs
+docs/
+*.md
+
+# Tests
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Installer
+installer/
+*.iss
+build_installer.sh
+BUILD.md
+
+# Desktop
+gui.py
+main.py
+database.py
+dates.py
+desktop/
+
+# Local data
+data/
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+*.bak
+
+# Logs
+*.log
+logs/
+
+# Backup
+backup/
+
+# Site files
+Сайт Исследования*/
+
+# Gigacode plans
+.gigacode/
+
+# Entrypoint (создаётся на сервере)
+entrypoint.sh

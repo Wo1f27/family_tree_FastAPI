@@ -6,8 +6,8 @@
 <h1>Сайт исследования нашей родословной</h1>
 
 <main>
-    <img class="my" src="/static/img/mama%20i%20papa.png" alt="фото">
-    <img src="/static/img/картинка прародители.jpg" alt="Картинка прародители">
+    <!-- Фото будут загружены через систему фото -->
+    <!-- <img class="my" src="/uploads/photos/persons/..." alt="фото"> -->
     <p> Для того, чтобы родиться нам нужно:
         2 - родителей;<br>
         4 - бабушки и дедушки;<br>
@@ -49,7 +49,11 @@
                 {% for person in persons %}
                 <div class="person-card" data-person-id="{{ person.id }}">
                     <div class="main-photo-wrapper">
-                        <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+                        {% if person.id in photos_cache and photos_cache[person.id] %}
+                            <img src="/uploads/photos/persons/{{ person.id }}/{{ photos_cache[person.id][0].filename }}" alt="{{ person.first_name }}" class="main-photo">
+                        {% else %}
+                            <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+                        {% endif %}
                     </div>
                     
                     <h3>{{ person.last_name }} {{ person.first_name }}{% if person.middle_name %} {{ person.middle_name }}{% endif %}{% if person.maiden_name %} (дев.{{ person.maiden_name }}){% endif %}</h3>

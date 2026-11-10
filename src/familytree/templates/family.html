@@ -23,7 +23,11 @@
     {% for person in persons %}
     <div class="person-card" data-person-id="{{ person.id }}">
         <div class="main-photo-wrapper">
-            <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+            {% if person.id in photos_cache and photos_cache[person.id] %}
+                <img src="/uploads/photos/persons/{{ person.id }}/{{ photos_cache[person.id][0].filename }}" alt="{{ person.first_name }}" class="main-photo">
+            {% else %}
+                <img src="/static/img/placeholder.png" alt="{{ person.first_name }}" class="main-photo">
+            {% endif %}
         </div>
 
         <h3>{{ person.last_name }} {{ person.first_name }}{% if person.middle_name %} {{ person.middle_name }}{% endif %}{% if person.maiden_name %} (дев.{{ person.maiden_name }}){% endif %}</h3>

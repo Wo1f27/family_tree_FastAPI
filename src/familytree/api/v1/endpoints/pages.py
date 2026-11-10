@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from familytree.api.deps import DBSession
 from familytree.core.templates import template_response
-from familytree.infrastructure.db.models import Person
+from familytree.infrastructure.db.models import Person, Photo
 
 router = APIRouter()
 
@@ -19,10 +20,22 @@ router = APIRouter()
 def index_page(request: Request, db: DBSession) -> HTMLResponse:
     """Главная страница."""
     from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+    
     stmt = select(Person).order_by(Person.last_name, Person.first_name)
     persons = list(db.scalars(stmt).all())
     
-    return template_response("index.html", {"persons": persons}, request)
+    # Загружаем фото для каждой персоны (если таблица photos существует)
+    photos_cache: dict[int, list] = {}
+    try:
+        for person in persons:
+            stmt_photos = select(Photo).where(Photo.person_id == person.id).order_by(Photo.sort_order, Photo.id)
+            photos_cache[person.id] = list(db.scalars(stmt_photos).all())
+    except OperationalError:
+        # Таблица photos ещё не создана
+        pass
+    
+    return template_response("index.html", {"persons": persons, "photos_cache": photos_cache}, request)
 
 
 @router.get("/surnames")
@@ -39,21 +52,36 @@ def surnames_page(request: Request, db: DBSession) -> HTMLResponse:
 def family_page(surname: str, request: Request, db: DBSession) -> HTMLResponse:
     """Страница семьи по фамилии."""
     from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+    
     stmt = select(Person).where(Person.last_name == surname).order_by(Person.first_name)
     persons = list(db.scalars(stmt).all())
 
-    return template_response("family.html", {"surname": surname, "persons": persons}, request)
+    # Загружаем фото для каждой персоны (если таблица photos существует)
+    photos_cache: dict[int, list] = {}
+    try:
+        for person in persons:
+            stmt_photos = select(Photo).where(Photo.person_id == person.id).order_by(Photo.sort_order, Photo.id)
+            photos_cache[person.id] = list(db.scalars(stmt_photos).all())
+    except OperationalError:
+        # Таблица photos ещё не создана
+        pass
+
+    return template_response("family.html", {"surname": surname, "persons": persons, "photos_cache": photos_cache}, request)
 
 
 @router.get("/gallery")
-def gallery_page(request: Request) -> HTMLResponse:
-    """Галерея фотографий из статических файлов."""
-    static_img_dir = Path(__file__).resolve().parent.parent.parent.parent / "static" / "img"
-    photos = []
-    if static_img_dir.exists():
-        for f in sorted(static_img_dir.iterdir()):
-            if f.suffix.lower() in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
-                photos.append(f"/static/img/{f.name}")
+def gallery_page(request: Request, db: DBSession) -> HTMLResponse:
+    """Галерея фотографий из БД."""
+    from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError
+    
+    try:
+        stmt = select(Photo).order_by(Photo.created_at.desc())
+        photos = list(db.scalars(stmt).all())
+    except OperationalError:
+        # Таблица photos ещё не создана
+        photos = []
 
     return template_response("gallery.html", {"photos": photos}, request)
 

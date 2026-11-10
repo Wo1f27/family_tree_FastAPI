@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, date, UTC
 from enum import Enum
+from uuid import uuid4
 from sqlalchemy import ForeignKey, Integer, Text, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -83,6 +84,12 @@ class Person(Base):
         order_by='NameVariant.id',
     )
 
+    photos: Mapped[list['Photo']] = relationship(
+        back_populates='person',
+        cascade='all, delete-orphan',
+        order_by='Photo.sort_order, Photo.id',
+    )
+
     @property
     def gender_enum(self) -> Gender:
         if isinstance(self.gender, str):
@@ -91,7 +98,12 @@ class Person(Base):
 
     def __repr__(self) -> str:
         return (f'Person(first_name={self.first_name}, last_name={self.last_name}, '
-                f'date_of_birth={self.date_of_birth}, date_of_death={self.date_of_death})>')
+                f'date_of_birth={self.date_of_birth}, date_of_death={self.date_of_death})')
+
+    @property
+    def main_photo(self) -> Photo | None:
+        """Первое фото персоны (для отображения на карточке)."""
+        return self.photos[0] if self.photos else None
 
 
 class Relationship(Base):
@@ -169,3 +181,33 @@ class NameVariant(Base):
 
     def __repr__(self) -> str:
         return f'NameVariant(person_id={self.person_id}, name={self.name!r})>'
+
+
+class Photo(Base):
+    """Фотография, привязанная к персоне."""
+
+    __tablename__ = 'photos'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    person_id: Mapped[int | None] = mapped_column(
+        ForeignKey('persons.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.now(UTC),
+        onupdate=datetime.now(UTC),
+    )
+
+    person: Mapped['Person'] = relationship(back_populates='photos')
+
+    def __repr__(self) -> str:
+        return f'Photo(id={self.id}, person_id={self.person_id}, filename={self.filename!r})>'

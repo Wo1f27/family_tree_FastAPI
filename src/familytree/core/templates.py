@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 
-def get_templates_dir():
-    """Get templates directory path, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        return Path(sys._MEIPASS) / "familytree" / "templates"
-    # Running in development
+def get_templates_dir() -> Path:
+    """Get templates directory path."""
     return Path(__file__).resolve().parent.parent / "templates"
 
 

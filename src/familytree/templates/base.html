@@ -73,6 +73,17 @@
                                 </div>
                             </div>
                         </div>
+                        
+                        <!-- Photo Upload -->
+                        <div class="form-group">
+                            <label for="photo_file">Фотография</label>
+                            <input type="file" id="photo_file" name="photo_file" accept="image/*">
+                            <small class="form-hint">Поддерживаются JPG, PNG, WebP. Макс. размер: 10 МБ</small>
+                            <div id="photo-preview" class="photo-preview" style="display: none;">
+                                <img id="photo-preview-img" src="" alt="Preview">
+                                <button type="button" class="btn btn-sm btn-danger" onclick="FamilyTree.removePhotoPreview()">✕ Удалить</button>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Birth Information -->

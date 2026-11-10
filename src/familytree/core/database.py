@@ -1,72 +1,77 @@
-"""SQLite storage for Family Tree Web API.
+"""Database layer for Family Tree Web API.
 
-Shared with desktop app — same database file, same schema.
-Updater contract:
-- Database file lives in user data folder, NOT in app directory.
-- App update must NOT delete/overwrite this folder.
-- On startup: create_all (new tables) + ADD COLUMN (new fields).
-- Existing rows and values are preserved; DROP/recreate tables are forbidden.
-- Before column migrations: backup genealogy.db → .bak
+Supports both SQLite (default) and PostgreSQL (configured via FAMILY_TREE_DB_URL or individual env vars).
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import sys
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-def _user_data_root() -> Path:
-    """Writable folder that survives app reinstalls."""
-    if sys.platform == 'win32':
-        base = os.environ.get('LOCALAPPDATA')
-        if base:
-            return Path(base) / 'FamilyTree'
-        return Path.home() / 'AppData' / 'Local' / 'FamilyTree'
-    if sys.platform == 'darwin':
-        return Path.home() / 'Library' / 'Application Support' / 'FamilyTree'
-    return Path.home() / '.local' / 'share' / 'FamilyTree'
+# ---------------------------------------------------------------------------
+# Lazy import of settings (avoids circular imports)
+# ---------------------------------------------------------------------------
+
+def _get_settings():
+    from familytree.core.config import settings
+    return settings
 
 
-def _resolve_data_dir() -> Path:
-    if getattr(sys, 'frozen', False):
-        return _user_data_root() / 'data'
-    # Development: project directory (same as desktop app)
-    return Path(__file__).resolve().parent.parent.parent.parent / 'data'
+# ---------------------------------------------------------------------------
+# Engine & Session
+# ---------------------------------------------------------------------------
+
+def _get_engine():
+    """Create SQLAlchemy engine based on configured DB URL."""
+    settings = _get_settings()
+    url = settings.resolved_db_url
+
+    # Ensure data directory exists for SQLite
+    if url.startswith('sqlite'):
+        # Extract path from sqlite:///path/to/db
+        db_path = url.replace('sqlite:///', '')
+        db_dir = Path(db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+    # Echo SQL in debug mode
+    echo = os.environ.get('FAMILY_TREE_DEBUG_SQL', '').lower() in ('1', 'true', 'yes')
+
+    # PostgreSQL-specific options
+    if url.startswith('postgresql'):
+        echo_pool = echo
+    else:
+        echo_pool = False
+
+    return create_engine(url, echo=echo, echo_pool=echo_pool)
 
 
-DATA_DIR = _resolve_data_dir()
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / 'genealogy.db'
+def _get_session_factory(engine):
+    return sessionmaker(
+        bind=engine,
+        autocommit=False,
+        autoflush=False,
+        expire_on_commit=False,
+    )
 
-_engine_echo = (not getattr(sys, 'frozen', False)) and os.environ.get('FAMILY_TREE_DEBUG_SQL', '').lower() in (
-    '1',
-    'true',
-    'yes',
-)
 
-engine = create_engine(
-    f'sqlite:///{DB_PATH}',
-    echo=_engine_echo,
-)
-
-SessionLocal = sessionmaker(
-    bind=engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,
-)
+# Module-level engine and session (initialized at import time)
+_engine = _get_engine()
+SessionLocal = _get_session_factory(_engine)
 
 
 class Base(DeclarativeBase):
     pass
 
 
-# (table, column, SQLite type) — only ADD COLUMN, no changes/deletes
+# ---------------------------------------------------------------------------
+# SQLite inline migrations (preserved for backward compatibility)
+# ---------------------------------------------------------------------------
+
 _SQLITE_COLUMN_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
     ('persons', 'place_of_birth', 'VARCHAR(255)'),
     ('persons', 'place_of_death', 'VARCHAR(255)'),
@@ -105,12 +110,14 @@ def _sqlite_column_names(conn, table: str) -> set[str]:
 
 
 def _backup_db_if_needed() -> None:
-    """Backup before ALTER — in case of update failure."""
-    if not DB_PATH.is_file():
+    """Backup before ALTER -- in case of update failure."""
+    settings = _get_settings()
+    db_path = Path(settings.db_path)
+    if not db_path.is_file():
         return
-    bak = DB_PATH.with_suffix('.db.bak')
+    bak = db_path.with_suffix('.db.bak')
     try:
-        shutil.copy2(DB_PATH, bak)
+        shutil.copy2(db_path, bak)
     except OSError:
         pass
 
@@ -141,55 +148,15 @@ def _ensure_schema_meta(conn) -> None:
         )
 
 
-def _apply_sqlite_migrations() -> None:
-    """Add missing columns in existing tables (SQLite), preserve data."""
-    if engine.dialect.name != 'sqlite':
-        return
-
-    pending = False
-    with engine.connect() as conn:
-        for table, column, _col_type in _SQLITE_COLUMN_MIGRATIONS:
-            if not _sqlite_table_exists(conn, table):
-                continue
-            if column not in _sqlite_column_names(conn, table):
-                pending = True
-                break
-
-    if pending:
-        _backup_db_if_needed()
-
-    with engine.begin() as conn:
-        for table, column, col_type in _SQLITE_COLUMN_MIGRATIONS:
-            if not _sqlite_table_exists(conn, table):
-                continue
-            if column in _sqlite_column_names(conn, table):
-                continue
-            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {col_type}'))
-        # Old addresses without kind are considered "current"
-        if _sqlite_table_exists(conn, 'addresses') and 'kind' in _sqlite_column_names(conn, 'addresses'):
-            conn.execute(
-                text("UPDATE addresses SET kind = 'current' WHERE kind IS NULL OR kind = ''")
-            )
-        _backfill_partial_dates_from_legacy(conn)
-        _ensure_schema_meta(conn)
-
-
 def _backfill_partial_dates_from_legacy(conn) -> None:
     """Split existing date_of_birth/death into year/month/day (once for empty rows)."""
     if not _sqlite_table_exists(conn, 'persons'):
         return
     cols = _sqlite_column_names(conn, 'persons')
     needed = {
-        'date_of_birth',
-        'date_of_death',
-        'birth_year',
-        'birth_month',
-        'birth_day',
-        'birth_approx',
-        'death_year',
-        'death_month',
-        'death_day',
-        'death_approx',
+        'date_of_birth', 'date_of_death',
+        'birth_year', 'birth_month', 'birth_day', 'birth_approx',
+        'death_year', 'death_month', 'death_day', 'death_approx',
     }
     if not needed.issubset(cols):
         return
@@ -224,10 +191,59 @@ def _backfill_partial_dates_from_legacy(conn) -> None:
     )
 
 
+def _apply_sqlite_migrations() -> None:
+    """Add missing columns in existing tables (SQLite only), preserve data."""
+    if _engine.dialect.name != 'sqlite':
+        return
+
+    pending = False
+    with _engine.connect() as conn:
+        for table, column, _col_type in _SQLITE_COLUMN_MIGRATIONS:
+            if not _sqlite_table_exists(conn, table):
+                continue
+            if column not in _sqlite_column_names(conn, table):
+                pending = True
+                break
+
+    if pending:
+        _backup_db_if_needed()
+
+    with _engine.begin() as conn:
+        for table, column, col_type in _SQLITE_COLUMN_MIGRATIONS:
+            if not _sqlite_table_exists(conn, table):
+                continue
+            if column in _sqlite_column_names(conn, table):
+                continue
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {col_type}'))
+        # Old addresses without kind are considered "current"
+        if _sqlite_table_exists(conn, 'addresses') and 'kind' in _sqlite_column_names(conn, 'addresses'):
+            conn.execute(
+                text("UPDATE addresses SET kind = 'current' WHERE kind IS NULL OR kind = ''")
+            )
+        _backfill_partial_dates_from_legacy(conn)
+        _ensure_schema_meta(conn)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def init_db() -> None:
     """Create missing tables and apply column migrations.
 
     IMPORTANT: Must be called AFTER all models are imported
     so that Base.metadata knows about all table definitions.
+
+    For SQLite: creates tables + applies inline column migrations.
+    For PostgreSQL: creates tables only (migrations handled by Alembic).
     """
-    _apply_sqlite_migrations()
+    if _engine.dialect.name == 'sqlite':
+        Base.metadata.create_all(_engine)
+        _apply_sqlite_migrations()
+    else:
+        # PostgreSQL: just ensure tables exist (Alembic handles schema changes)
+        Base.metadata.create_all(_engine)
+
+
+# Expose engine for Alembic to use
+engine = _engine

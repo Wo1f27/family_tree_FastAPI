@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
+from familytree.schemas.photo import PhotoResponse
 
 
 class PersonBase(BaseModel):
@@ -60,5 +61,6 @@ class PersonResponse(PersonBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    photos: list[PhotoResponse] = []
 
     model_config = {"from_attributes": True}
